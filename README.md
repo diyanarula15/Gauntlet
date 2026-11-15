@@ -4,6 +4,10 @@
 
 A research-agent sidecar implementing the supplied **Gauntlet — Agent Benchmarking Platform Plan & System Design.md**, with FAULTLINE's existing name and paired counterfactual experience retained. Model and tool traffic pass through run-scoped recording proxies. Success, model steps, tools, tokens, money, latency, citation grounding and fault behavior are measured outside agent reasoning loops.
 
+## Interface
+
+The UI follows the Day Arena reference: warm paper surfaces, dark ink borders, violet actions, pixel challenger sprites, hearts for repeat outcomes and clickable trace tiles. Jersey15, Silkscreen and IBM Plex fonts are self-hosted in `frontend/public/fonts` with their OFL licenses. All scores and run states come from the backend; the style-board specimen values are not used.
+
 ## Start
 
 Dependencies and production frontend assets are installed in this workspace:

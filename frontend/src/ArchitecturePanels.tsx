@@ -1,3 +1,5 @@
+import { AgentIdentity, BehaviorBadge } from "./ArenaPanels";
+import { PixelIcon } from "./ArenaAssets";
 import { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
@@ -102,7 +104,11 @@ export function ReliabilityBoard({
         <div className="filter-row">
           <label>
             Tier
-            <select aria-label="Leaderboard tier" value={tier} onChange={(e) => setTier(e.target.value)}>
+            <select
+              aria-label="Leaderboard tier"
+              value={tier}
+              onChange={(e) => setTier(e.target.value)}
+            >
               <option value="all">All tiers</option>
               <option value="1">1 · lookup</option>
               <option value="2">2 · multi-hop</option>
@@ -123,7 +129,11 @@ export function ReliabilityBoard({
           </label>
           <label>
             Sort
-            <select aria-label="Leaderboard sort" value={sort} onChange={(e) => setSort(e.target.value)}>
+            <select
+              aria-label="Leaderboard sort"
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+            >
               <option value="pass_3">pass^3</option>
               <option value="clean_success">Clean success</option>
               <option value="fault_tolerance">Fault tolerance</option>
@@ -141,13 +151,13 @@ export function ReliabilityBoard({
               <ScatterChart
                 margin={{ top: 20, right: 30, left: 0, bottom: 15 }}
               >
-                <CartesianGrid stroke="#2a3040" strokeDasharray="3 5" />
+                <CartesianGrid stroke="#D9D0BD" strokeDasharray="3 5" />
                 <XAxis
                   type="number"
                   dataKey="cost_per_success"
                   name="Cost per success"
                   tickFormatter={(x) => "$" + x}
-                  stroke="#8a93ac"
+                  stroke="#5B5668"
                 />
                 <YAxis
                   type="number"
@@ -155,7 +165,7 @@ export function ReliabilityBoard({
                   name="Clean success"
                   domain={[0, 1]}
                   tickFormatter={(x) => rate(x)}
-                  stroke="#8a93ac"
+                  stroke="#5B5668"
                 />
                 <Tooltip
                   cursor={{ strokeDasharray: "3 3" }}
@@ -167,7 +177,7 @@ export function ReliabilityBoard({
                   {plotted.map((r) => (
                     <Cell
                       key={r.agent_id}
-                      fill={r.frontier ? "#64d6ba" : "#9675f8"}
+                      fill={r.frontier ? "#2FB36A" : "#5B3FD6"}
                     />
                   ))}
                 </Scatter>
@@ -240,7 +250,13 @@ export function ReliabilityBoard({
             {ranked.map((r) => (
               <tr key={r.agent_id}>
                 <td>
-                  <b>{name(r.agent_id)}</b>
+                  <AgentIdentity
+                    id={r.agent_id}
+                    name={name(r.agent_id)}
+                    index={catalog.agents.findIndex(
+                      (a: Row) => a.id === r.agent_id,
+                    )}
+                  />
                   <small>
                     {experiment.config.model_policy === "own"
                       ? "Agent-selected model"
@@ -370,13 +386,25 @@ export function RepeatComparison({
                             key={r.id}
                             className={
                               "repeat-square " +
-                              (["pending","running","cancelled"].includes(r.status) ? "pending" : r.evaluation?.outcome === "success" ? "pass" : r.evaluation ? "fail" : "pending")
+                              (["pending", "running", "cancelled"].includes(
+                                r.status,
+                              )
+                                ? "pending"
+                                : r.evaluation?.outcome === "success"
+                                  ? "pass"
+                                  : r.evaluation
+                                    ? "fail"
+                                    : "pending")
                             }
                             title={`Repeat ${r.repetition + 1}: ${r.evaluation?.outcome || r.status}; ${r.evaluation?.behavior || "pending"}`}
                             aria-label={`${names(agentId)} ${taskId} repeat ${r.repetition + 1}`}
                             onClick={() => onInspect(r)}
                           >
-                            {r.repetition + 1}
+                            <PixelIcon
+                              name="heart"
+                              size={21}
+                              filled={r.evaluation?.outcome === "success"}
+                            />
                           </button>
                         ))}
                       </div>

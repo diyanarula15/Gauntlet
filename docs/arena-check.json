@@ -1,0 +1,28 @@
+{
+  "passed": true,
+  "computed": {
+    "paper": "#f6f1e7",
+    "heading": "\"Jersey 15\", monospace",
+    "pixelLoaded": true
+  },
+  "mobileWidth": {
+    "viewport": 390,
+    "page": 390
+  },
+  "actualRuns": 6,
+  "checks": [
+    "reference palette",
+    "self-hosted fonts",
+    "mobile overflow",
+    "new run",
+    "repeat grid",
+    "trace tile jump",
+    "paired comparison",
+    "matrix navigation",
+    "report export",
+    "tier filter",
+    "score controls",
+    "source drilldown"
+  ],
+  "pageErrors": []
+}

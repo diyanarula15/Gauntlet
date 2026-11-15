@@ -17,3 +17,6 @@ frontend/dist/
 # planning and internal markdown; keep readmes
 *.md
 !README.md
+
+# local visual reference board
+/gauntlet-style-board.html

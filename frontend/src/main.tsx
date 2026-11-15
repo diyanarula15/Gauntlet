@@ -31,6 +31,14 @@ import {
 } from "recharts";
 import "./style.css";
 import {
+  ChallengerCards,
+  AgentIdentity,
+  BehaviorBadge,
+  TraceTiles,
+  agentColors,
+} from "./ArenaPanels";
+import { AgentAvatar, PixelIcon } from "./ArenaAssets";
+import {
   ReliabilityBoard,
   RepeatComparison,
   GradingPanel,
@@ -74,7 +82,7 @@ const nav = [
   ["Run report", Download],
 ] as const;
 function App() {
-  const [page, setPage] = useState("Overview"),
+  const [page, setPage] = useState("Leaderboard"),
     [catalog, setCatalog] = useState<Obj | null>(null),
     [experiments, setExperiments] = useState<Obj[]>([]),
     [selected, setSelected] = useState(""),
@@ -98,7 +106,14 @@ function App() {
     [costCap, setCostCap] = useState("");
   const refresh = async () => {
     try {
-      setExperiments(await api("/experiments"));
+      const list = await api("/experiments");
+      setExperiments(list);
+      setSelected(
+        (current) =>
+          current ||
+          list.find((item: Obj) => item.status === "completed")?.id ||
+          "",
+      );
     } catch (e) {
       setError(String(e));
     }
@@ -154,7 +169,9 @@ function App() {
   const runs: Obj[] = exp?.runs || [];
   const terminal = runs.filter(
     (r) =>
-      !["pending", "running", "cancelled"].includes(r.status) && r.metrics && r.evaluation,
+      !["pending", "running", "cancelled"].includes(r.status) &&
+      r.metrics &&
+      r.evaluation,
   );
   const success = terminal.filter((r) => r.evaluation?.outcome === "success");
   const toggle = (list: string[], id: string, set: (x: string[]) => void) =>
@@ -205,16 +222,34 @@ function App() {
   const name = (id: string) =>
     catalog?.agents.find((a: Obj) => a.id === id)?.display_name || id;
   const Event = ({ e }: { e: Obj }) => (
-    <details className={"event " + (e.fault ? "injected" : "")}>
+    <details
+      id={"event-" + e.id}
+      tabIndex={-1}
+      className={
+        "event " +
+        (e.fault ? "injected " : "") +
+        "service-" +
+        (e.service || "lifecycle")
+      }
+    >
       <summary>
         <span className="event-icon">
-          {e.fault ? (
-            <Zap size={14} />
-          ) : e.service === "model" ? (
-            <CircleDot size={14} />
-          ) : (
-            <Activity size={14} />
-          )}
+          <PixelIcon
+            name={
+              e.fault
+                ? "trap"
+                : e.event_type === "BUDGET_EXCEEDED"
+                  ? "limit"
+                  : e.service === "model"
+                    ? "model"
+                    : ["search", "extract"].includes(e.service)
+                      ? "tool"
+                      : e.event_type === "AGENT_OUTPUT"
+                        ? "answer"
+                        : "start"
+            }
+            size={18}
+          />
         </span>
         <span>
           <b>
@@ -270,7 +305,15 @@ function App() {
           {list.map((r) => (
             <tr key={r.id}>
               <td>
-                <b>{name(r.agent_id)}</b>
+                <AgentIdentity
+                  id={r.agent_id}
+                  name={name(r.agent_id)}
+                  index={
+                    catalog?.agents.findIndex(
+                      (a: Obj) => a.id === r.agent_id,
+                    ) ?? 0
+                  }
+                />
                 <small>
                   {r.task_id} · repeat {r.repetition + 1}
                 </small>
@@ -279,16 +322,16 @@ function App() {
               <td>
                 <span
                   className={
-                    "badge " +
-                    (r.evaluation?.outcome === "success"
-                      ? "green"
-                      : r.status === "failed"
-                        ? "orange"
-                        : "")
+                    "badge outcome-" + (r.evaluation?.outcome || r.status)
                   }
                 >
                   {r.evaluation?.outcome || r.status}
                 </span>
+                {r.scenario_id !== "baseline" && r.evaluation && (
+                  <small>
+                    <BehaviorBadge behavior={r.evaluation.behavior} />
+                  </small>
+                )}
               </td>
               <td>
                 {r.metrics
@@ -333,35 +376,46 @@ function App() {
   return (
     <div className="shell">
       <aside>
-        <a className="brand" href="#" onClick={() => setPage("Overview")}>
-          <span className="brand-icon">
-            <Zap size={23} />
-          </span>
-          FAULTLINE<span className="beta">LAB</span>
+        <a
+          className="brand"
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            setPage("Leaderboard");
+          }}
+        >
+          <span className="brand-icon">G</span>GAUNTLET
         </a>
-        <div className="workspace">
-          <span className="workspace-icon">F</span>
-          <div>
-            Research workspace<small>Local environment</small>
-          </div>
-          <ChevronDown size={14} />
-        </div>
-        <p className="nav-label">WORKSPACE</p>
-        <nav>
-          {nav.map(([label, Icon]) => (
+        <nav aria-label="Main navigation">
+          {(
+            [
+              ["Leaderboard", "Leaderboard"],
+              ["Compare agents", "Versus"],
+              ["Trace explorer", "Replay"],
+              ["Benchmark lab", "New run"],
+            ] as const
+          ).map(([id, label]) => (
             <button
-              key={label}
-              className={page === label ? "active" : ""}
-              onClick={() => setPage(label)}
+              key={id}
+              className={page === id ? "active" : ""}
+              aria-label={label === id ? id : `${label}: ${id}`}
+              onClick={() => setPage(id)}
             >
-              <Icon size={17} />
               {label}
-              {label === "Experiments" && (
-                <span className="nav-count">{experiments.length}</span>
-              )}
             </button>
           ))}
         </nav>
+        <div className="workspace">
+          <span className="dot" /> Research arena <small>v0.2</small>
+        </div>
+        <button
+          className="primary top-run"
+          aria-label="Start run: new benchmark"
+          onClick={() => setPage("Benchmark lab")}
+        >
+          <PixelIcon name="start" size={18} />
+          Start run
+        </button>
         <div className="aside-bottom">
           <div>
             <span className="dot" /> Harness operational
@@ -376,7 +430,29 @@ function App() {
       </aside>
       <main>
         <header>
-          <span>
+          <div className="secondary-nav" aria-label="More views">
+            {nav
+              .filter(
+                ([label]) =>
+                  ![
+                    "Leaderboard",
+                    "Compare agents",
+                    "Trace explorer",
+                    "Benchmark lab",
+                  ].includes(label),
+              )
+              .map(([label, Icon]) => (
+                <button
+                  key={label}
+                  className={page === label ? "active" : ""}
+                  onClick={() => setPage(label)}
+                >
+                  <Icon size={13} />
+                  {label}
+                </button>
+              ))}
+          </div>
+          <span className="breadcrumb">
             Workspace <ChevronRight size={13} /> <b>{page}</b>
           </span>
           <div>
@@ -385,7 +461,7 @@ function App() {
                 ? "OFFLINE DEMO"
                 : "LIVE MODEL"}
             </span>
-            <span className="avatar">FL</span>
+            <span className="arena-label">DAY ARENA</span>
           </div>
         </header>
         <div className="content">
@@ -403,7 +479,8 @@ function App() {
               <div className="page-heading">
                 <div>
                   <p className="eyebrow">
-                    <span className="dot purple" /> THE AI AGENT CRASH-TEST LAB
+                    <span className="dot purple" /> RESEARCH AGENTS / THE
+                    CRASH-TEST ARENA
                   </p>
                   <h1>
                     {page === "Overview" ? (
@@ -419,7 +496,17 @@ function App() {
                         <span>Every observable difference.</span>
                       </>
                     ) : (
-                      page
+                      (
+                        {
+                          Leaderboard: "Hall of Champions",
+                          "Compare agents": "Challenger versus challenger",
+                          "Trace explorer": "Replay the run",
+                          "Benchmark lab": "Enter the arena",
+                          Experiments: "Runs in progress",
+                          "Fault matrix": "The fault arena",
+                          "Run report": "The run record",
+                        } as Obj
+                      )[page] || page
                     )}
                   </h1>
                   <p>
@@ -597,7 +684,7 @@ function App() {
                       <Integration
                         title="Evidence snapshot"
                         subtitle={`${Object.keys(catalog.snapshot?.entries || {}).length} registered query variants · curated fixtures`}
-                        state={catalog.snapshot.snapshot_id.slice(0,13)}
+                        state={catalog.snapshot.snapshot_id.slice(0, 13)}
                         ok
                       />
                       <p className="muted">
@@ -666,7 +753,11 @@ function App() {
                               checked={agents.includes(a.id)}
                               onChange={() => toggle(agents, a.id, setAgents)}
                             />
-                            <Terminal size={22} />
+                            <AgentAvatar
+                              id={a.id}
+                              size={54}
+                              color={agentColors[catalog.agents.indexOf(a) % 6]}
+                            />
                             <b>{a.display_name}</b>
                             <small>{a.framework}</small>
                             <span>{a.retry_policy}</span>
@@ -980,6 +1071,20 @@ function App() {
                 ) : (
                   empty("No experiment selected")
                 ))}
+              {page === "Leaderboard" && (
+                <ChallengerCards
+                  experiment={exp}
+                  catalog={catalog}
+                  onInspect={(id) => {
+                    setScenarioFilter("all");
+                    const first = runs.find(
+                      (r) => r.agent_id === id && r.metrics,
+                    );
+                    if (first) openTrace(first);
+                    else setPage("Benchmark lab");
+                  }}
+                />
+              )}
               {page === "Leaderboard" &&
                 (exp ? (
                   <ReliabilityBoard
@@ -1083,6 +1188,10 @@ function App() {
                             {trace.evaluation?.outcome || trace.status}
                           </span>
                         </div>
+                        <TraceTiles events={trace.events} />
+                        <BehaviorBadge
+                          behavior={trace.evaluation?.behavior || "unknown"}
+                        />
                         <GradingPanel run={trace} />
                         {trace.events.map((e: Obj) => (
                           <Event key={e.id} e={e} />
@@ -1311,7 +1420,7 @@ function App() {
           )}
           <footer>
             <span>
-              <Zap size={12} /> FAULTLINE
+              <PixelIcon name="start" size={14} /> GAUNTLET
             </span>
             <span>Controlled conditions. Honest measurements.</span>
             <span>RESEARCH AGENT EVALUATION</span>
@@ -1387,42 +1496,42 @@ function Chart({ rows }: { rows: Obj[] }) {
         >
           <CartesianGrid
             strokeDasharray="3 5"
-            stroke="#252937"
+            stroke="#D9D0BD"
             vertical={false}
           />
           <XAxis
             dataKey="name"
-            stroke="#7c8298"
+            stroke="#5B5668"
             tickLine={false}
             axisLine={false}
           />
           <YAxis
             domain={[0, 100]}
-            stroke="#7c8298"
+            stroke="#5B5668"
             tickLine={false}
             axisLine={false}
             tickFormatter={(v) => v + "%"}
           />
           <Tooltip
             contentStyle={{
-              background: "#181b25",
-              border: "1px solid #383d51",
+              background: "#FFFDF8",
+              border: "2px solid #1D1A26",
               borderRadius: 8,
             }}
           />
           <Bar
             dataKey="baseline"
-              isAnimationActive={false}
+            isAnimationActive={false}
             name="Baseline %"
-            fill="#8b70f9"
+            fill="#5B3FD6"
             radius={[4, 4, 0, 0]}
             maxBarSize={44}
           />
           <Bar
             dataKey="faulted"
-              isAnimationActive={false}
+            isAnimationActive={false}
             name="Faulted %"
-            fill="#4ed9ce"
+            fill="#12A5B0"
             radius={[4, 4, 0, 0]}
             maxBarSize={44}
           />
@@ -1430,10 +1539,10 @@ function Chart({ rows }: { rows: Obj[] }) {
       </ResponsiveContainer>
       <div className="legend">
         <span>
-          <i style={{ background: "#8b70f9" }} /> Baseline
+          <i style={{ background: "#5B3FD6" }} /> Baseline
         </span>
         <span>
-          <i style={{ background: "#4ed9ce" }} /> Faulted
+          <i style={{ background: "#12A5B0" }} /> Faulted
         </span>
       </div>
     </div>
