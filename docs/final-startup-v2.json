@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "experiment_id": "9559192f5d3f4598bf71f48e601f8414",
+  "completed_runs": 27,
+  "agents": 3,
+  "tasks": 8,
+  "restart_persistence": true,
+  "json_export": true,
+  "html_report": true,
+  "frontend_status": 200
+}

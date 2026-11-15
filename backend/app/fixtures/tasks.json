@@ -1,0 +1,529 @@
+[
+  {
+    "id": "research_001",
+    "title": "Verify the Python 3.10.0 release date",
+    "question": "According to Python.org, on what date was Python 3.10.0 released?",
+    "category": "fact_verification",
+    "expected_answer": "Python 3.10.0 was released on October 4, 2021.",
+    "accepted_variants": [
+      "October 4, 2021",
+      "Oct. 4, 2021",
+      "2021-10-04"
+    ],
+    "ground_truth_sources": [
+      "https://www.python.org/downloads/release/python-3100/"
+    ],
+    "evidence_snapshot_id": "demo-v1",
+    "max_steps": 10,
+    "max_seconds": 90,
+    "difficulty": "easy",
+    "query": "Python 3.10.0 release date Python.org",
+    "evidence": {
+      "provenance": "offline_demo_fixture; manually curated source excerpt, not a captured Tavily response",
+      "results": [
+        {
+          "title": "Python Release Python 3.10.0",
+          "url": "https://www.python.org/downloads/release/python-3100/",
+          "content": "Python.org's Python 3.10.0 release page lists the release date as Oct. 4, 2021."
+        }
+      ]
+    },
+    "required_facts": [
+      [
+        "October 4, 2021",
+        "Oct. 4, 2021",
+        "2021-10-04",
+        "4 October 2021",
+        "4 Oct 2021"
+      ]
+    ],
+    "require_citation": true,
+    "tier": 1,
+    "answerable": true,
+    "must_cite": true,
+    "answer_spec": {
+      "type": "exact",
+      "accept": [
+        "October 4, 2021",
+        "Oct. 4, 2021",
+        "2021-10-04"
+      ]
+    },
+    "forbidden_answers": [
+      "October 5, 2021",
+      "Oct. 5, 2021",
+      "2021-10-05"
+    ]
+  },
+  {
+    "id": "research_002",
+    "title": "Verify Voyager 1 launch details across sources",
+    "question": "On what date did Voyager 1 launch, and what launch vehicle does NASA list for it?",
+    "category": "multi_source_research",
+    "expected_answer": "Voyager 1 launched on September 5, 1977, aboard a Titan IIIE-Centaur (TC-6 / Titan no. 23E-6 / Centaur D-1T).",
+    "accepted_variants": [
+      "Sept. 5, 1977; Titan IIIE-Centaur",
+      "September 5 1977; Titan IIIE-Centaur"
+    ],
+    "ground_truth_sources": [
+      "https://science.nasa.gov/mission/voyager/voyager-1/",
+      "https://www.jpl.nasa.gov/missions/voyager-1/"
+    ],
+    "evidence_snapshot_id": "demo-v1",
+    "max_steps": 10,
+    "max_seconds": 90,
+    "difficulty": "medium",
+    "query": "NASA Voyager 1 launch date launch vehicle",
+    "evidence": {
+      "provenance": "offline_demo_fixture; manually curated source excerpts, not captured Tavily responses",
+      "results": [
+        {
+          "title": "Voyager 1: The Farthest Spacecraft — NASA Science",
+          "url": "https://science.nasa.gov/mission/voyager/voyager-1/",
+          "content": "NASA lists Voyager 1's launch date as Sept. 5, 1977 and its launch vehicle as Titan IIIE-Centaur (TC-6 / Titan no. 23E-6 / Centaur D-1T)."
+        },
+        {
+          "title": "Voyager 1 — NASA Jet Propulsion Laboratory",
+          "url": "https://www.jpl.nasa.gov/missions/voyager-1/",
+          "content": "NASA JPL's Voyager 1 mission page also gives the launch date as Sept. 5, 1977."
+        }
+      ]
+    },
+    "required_facts": [
+      [
+        "September 5, 1977",
+        "Sept. 5, 1977",
+        "Sep 5 1977",
+        "1977-09-05",
+        "5 September 1977"
+      ],
+      [
+        "Titan IIIE-Centaur",
+        "Titan IIIE Centaur",
+        "Titan III E Centaur",
+        "Titan IIIE/Centaur"
+      ]
+    ],
+    "require_citation": true,
+    "tier": 2,
+    "answerable": true,
+    "must_cite": true,
+    "answer_spec": {
+      "type": "set",
+      "accept": [
+        "September 5, 1977",
+        "Titan IIIE-Centaur"
+      ],
+      "items": [
+        [
+          "September 5, 1977",
+          "Sept. 5, 1977",
+          "Sep 5 1977",
+          "1977-09-05",
+          "5 September 1977"
+        ],
+        [
+          "Titan IIIE-Centaur",
+          "Titan IIIE Centaur",
+          "Titan III E Centaur",
+          "Titan IIIE/Centaur"
+        ]
+      ]
+    },
+    "forbidden_answers": [
+      "September 6, 1977",
+      "Sept. 6, 1977",
+      "1977-09-06"
+    ]
+  },
+  {
+    "id": "research_003",
+    "title": "Extract Apollo 11 mission duration",
+    "question": "How long was the Apollo 11 mission from launch through return, according to NASA's mission overview? Give days, hours, and minutes.",
+    "category": "numerical_fact_extraction",
+    "expected_answer": "Apollo 11's mission duration was 8 days, 3 hours, and 18 minutes.",
+    "accepted_variants": [
+      "8 days 3 hours 18 minutes",
+      "08 days, 03 hours, 18 minutes",
+      "8d 3h 18m"
+    ],
+    "ground_truth_sources": [
+      "https://www.nasa.gov/wp-content/uploads/static/history/alsj/a11/a11ov.html"
+    ],
+    "evidence_snapshot_id": "demo-v1",
+    "max_steps": 10,
+    "max_seconds": 90,
+    "difficulty": "medium",
+    "query": "NASA Apollo 11 mission overview total duration days hours minutes",
+    "evidence": {
+      "provenance": "offline_demo_fixture; manually curated source excerpt, not a captured Tavily response",
+      "results": [
+        {
+          "title": "Apollo 11 Lunar Surface Journal: Mission Overview",
+          "url": "https://www.nasa.gov/wp-content/uploads/static/history/alsj/a11/a11ov.html",
+          "content": "NASA's Apollo 11 mission overview gives the mission duration as 08 days, 03 hours, 18 minutes."
+        }
+      ]
+    },
+    "required_facts": [
+      [
+        "8 days",
+        "08 days",
+        "8d"
+      ],
+      [
+        "3 hours",
+        "03 hours",
+        "3h"
+      ],
+      [
+        "18 minutes",
+        "18m"
+      ]
+    ],
+    "require_citation": true,
+    "tier": 1,
+    "answerable": true,
+    "must_cite": true,
+    "answer_spec": {
+      "type": "numeric",
+      "value": {
+        "days": 8,
+        "hours": 3,
+        "minutes": 18
+      },
+      "tolerance": 0
+    },
+    "forbidden_answers": [
+      "13 hours",
+      "13h",
+      "13 hours 0 minutes"
+    ]
+  },
+  {
+    "id": "research_004",
+    "title": "Distinguish Apollo 11 launch and landing dates",
+    "question": "NASA sources give both July 16 and July 20, 1969 for Apollo 11. Which date was launch, which was the first lunar landing, and why are both dates correct?",
+    "category": "source_disagreement",
+    "expected_answer": "Apollo 11 launched on July 16, 1969, and the lunar module landed on the Moon on July 20, 1969. The dates describe separate mission events, so they do not conflict.",
+    "accepted_variants": [
+      "Launch: July 16, 1969; landing: July 20, 1969. They are different events.",
+      "Apollo 11 launched July 16 and landed July 20, 1969."
+    ],
+    "ground_truth_sources": [
+      "https://science.nasa.gov/moon/missions/",
+      "https://www.nasa.gov/mission/apollo-11/",
+      "https://www.nasa.gov/wp-content/uploads/static/history/alsj/a11/a11ov.html"
+    ],
+    "evidence_snapshot_id": "demo-v1",
+    "max_steps": 10,
+    "max_seconds": 90,
+    "difficulty": "medium",
+    "query": "NASA Apollo 11 launch date versus first lunar landing date July 16 July 20 1969",
+    "evidence": {
+      "provenance": "offline_demo_fixture; manually curated source excerpts, not captured Tavily responses",
+      "results": [
+        {
+          "title": "Moon Missions — NASA Science",
+          "url": "https://science.nasa.gov/moon/missions/",
+          "content": "NASA's mission table lists Apollo 11's launch as July 16, 1969 and arrival as July 20, 1969; it describes the outcome as the first humans to land on the Moon."
+        },
+        {
+          "title": "Apollo 11 — NASA",
+          "url": "https://www.nasa.gov/mission/apollo-11/",
+          "content": "NASA's Apollo 11 page identifies the mission launch on July 16, 1969 and highlights the lunar module landing."
+        },
+        {
+          "title": "Apollo 11 Lunar Surface Journal: Mission Overview",
+          "url": "https://www.nasa.gov/wp-content/uploads/static/history/alsj/a11/a11ov.html",
+          "content": "NASA's mission overview gives the full mission period as July 16–24, 1969 and records that the Eagle lunar module landed on July 20, 1969."
+        }
+      ]
+    },
+    "required_facts": [
+      [
+        "launched on July 16, 1969",
+        "launched July 16, 1969",
+        "launch on July 16, 1969",
+        "launch as July 16, 1969",
+        "launch July 16, 1969",
+        "launch date July 16, 1969",
+        "launched on 16 July 1969",
+        "launch 1969-07-16",
+        "launched July 16",
+        "launched on July 16",
+        "launch date was July 16, 1969",
+        "launch was on July 16, 1969"
+      ],
+      [
+        "landed on the Moon on July 20, 1969",
+        "landed on July 20, 1969",
+        "landed July 20, 1969",
+        "landing on July 20",
+        "landing July 20",
+        "arrival as July 20, 1969",
+        "lunar landing July 20, 1969",
+        "landing 1969-07-20",
+        "landed on 20 July 1969",
+        "landed July 20",
+        "landed on July 20",
+        "landing date was July 20, 1969",
+        "landing was on July 20, 1969"
+      ],
+      [
+        "1969"
+      ]
+    ],
+    "require_citation": true,
+    "tier": 2,
+    "answerable": true,
+    "must_cite": true,
+    "answer_spec": {
+      "type": "regex",
+      "patterns": [
+        "(?is)launch(?:ed)?[^.]{0,80}(?:July 16|16 July)[^.;]*1969",
+        "(?is)(?:land(?:ed|ing)|touchdown)[^.]{0,80}(?:July 20|20 July)[^.;]*1969"
+      ]
+    },
+    "forbidden_answers": [
+      "launched on July 20, 1969",
+      "launch date was July 20, 1969",
+      "landed on the Moon on July 16, 1969",
+      "landing date was July 16, 1969"
+    ]
+  },
+  {
+    "id": "research_005",
+    "title": "Find the exact speed of light in vacuum",
+    "question": "According to NIST, what is the exact speed of light in vacuum in meters per second?",
+    "category": "numerical_fact_extraction",
+    "expected_answer": "The speed of light in vacuum is exactly 299,792,458 meters per second.",
+    "accepted_variants": [
+      "299792458 m/s",
+      "299 792 458 meters per second",
+      "299,792,458 m s−1"
+    ],
+    "ground_truth_sources": [
+      "https://physics.nist.gov/cuu/Constants/Value/c.html"
+    ],
+    "evidence_snapshot_id": "demo-v1",
+    "max_steps": 5,
+    "max_seconds": 60,
+    "difficulty": "easy",
+    "tier": 1,
+    "answerable": true,
+    "must_cite": true,
+    "query": "NIST exact speed of light in vacuum meters per second",
+    "evidence": {
+      "provenance": "offline_demo_fixture; manually curated source excerpt, not a captured Tavily response",
+      "results": [
+        {
+          "title": "CODATA Value: speed of light in vacuum — NIST",
+          "url": "https://physics.nist.gov/cuu/Constants/Value/c.html",
+          "content": "NIST CODATA lists the speed of light in vacuum as 299 792 458 meters per second, exact."
+        }
+      ]
+    },
+    "answer_spec": {
+      "type": "exact",
+      "accept": [
+        "299,792,458 meters per second",
+        "299792458 m/s",
+        "299 792 458 m s−1",
+        "299 792 458 meters per second"
+      ]
+    },
+    "required_facts": [
+      [
+        "299,792,458",
+        "299792458",
+        "299 792 458"
+      ],
+      [
+        "meters per second",
+        "m/s",
+        "m s−1"
+      ]
+    ],
+    "require_citation": true
+  },
+  {
+    "id": "research_006",
+    "title": "Look up Mars average distance from the Sun",
+    "question": "What average distance from the Sun does NASA give for Mars, in million kilometers?",
+    "category": "numerical_fact_extraction",
+    "expected_answer": "NASA gives Mars an average distance of 227.9 million kilometers from the Sun.",
+    "accepted_variants": [
+      "227.9 million km",
+      "227900000 kilometers",
+      "227.9 million kilometers"
+    ],
+    "ground_truth_sources": [
+      "https://science.nasa.gov/solar-system/planet-sizes-and-locations-in-our-solar-system/"
+    ],
+    "evidence_snapshot_id": "demo-v1",
+    "max_steps": 5,
+    "max_seconds": 60,
+    "difficulty": "easy",
+    "tier": 1,
+    "answerable": true,
+    "must_cite": true,
+    "query": "NASA Mars average distance from Sun million kilometers",
+    "evidence": {
+      "provenance": "offline_demo_fixture; manually curated source excerpt, not a captured Tavily response",
+      "results": [
+        {
+          "title": "Planet Sizes and Locations in Our Solar System — NASA Science",
+          "url": "https://science.nasa.gov/solar-system/planet-sizes-and-locations-in-our-solar-system/",
+          "content": "NASA lists Mars average distance from the Sun as 141.6 million miles and 227.9 million kilometers."
+        }
+      ]
+    },
+    "answer_spec": {
+      "type": "numeric",
+      "value": 227.9,
+      "unit": "million kilometers",
+      "tolerance": 0.05
+    },
+    "required_facts": [
+      [
+        "227.9 million kilometers",
+        "227.9 million km",
+        "227900000 kilometers"
+      ]
+    ],
+    "require_citation": true
+  },
+  {
+    "id": "research_007",
+    "title": "Identify Perseverance landing date, site, and method",
+    "question": "According to NASA, when and where did Perseverance land on Mars, and what landing system lowered it to the surface?",
+    "category": "multi_source_research",
+    "expected_answer": "Perseverance landed in Jezero Crater on February 18, 2021. Its descent stage used the sky crane system to lower the rover to the surface.",
+    "accepted_variants": [
+      "Feb. 18, 2021; Jezero Crater; sky crane",
+      "February 18 2021 at Jezero Crater using the sky crane"
+    ],
+    "ground_truth_sources": [
+      "https://science.nasa.gov/planetary-science/programs/mars-exploration/mission-timeline/how-we-land-on-mars/",
+      "https://www.jpl.nasa.gov/news/press_kits/mars_2020/landing/quick_facts/"
+    ],
+    "evidence_snapshot_id": "demo-v1",
+    "max_steps": 8,
+    "max_seconds": 75,
+    "difficulty": "medium",
+    "tier": 2,
+    "answerable": true,
+    "must_cite": true,
+    "query": "NASA Perseverance Mars landing date Jezero Crater sky crane system",
+    "evidence": {
+      "provenance": "offline_demo_fixture; manually curated source excerpts, not captured Tavily responses",
+      "results": [
+        {
+          "title": "How We Land on Mars — NASA Science",
+          "url": "https://science.nasa.gov/planetary-science/programs/mars-exploration/mission-timeline/how-we-land-on-mars/",
+          "content": "NASA says Perseverance landed in Jezero Crater on Feb. 18, 2021. Engineers reused the sky crane system to land the rover; the descent stage lowered it on cables."
+        },
+        {
+          "title": "Mars 2020 Perseverance Landing Press Kit: Quick Facts — NASA JPL",
+          "url": "https://www.jpl.nasa.gov/news/press_kits/mars_2020/landing/quick_facts/",
+          "content": "NASA JPL lists the Perseverance Mars landing time as Feb. 18, 2021, and describes the descent stage as performing the sky crane maneuver to lower the rover to the surface."
+        }
+      ]
+    },
+    "answer_spec": {
+      "type": "set",
+      "accept": [
+        "February 18, 2021",
+        "Jezero Crater",
+        "sky crane"
+      ],
+      "items": [
+        [
+          "February 18, 2021",
+          "Feb. 18, 2021",
+          "Feb 18 2021"
+        ],
+        [
+          "Jezero Crater"
+        ],
+        [
+          "sky crane",
+          "skycrane"
+        ]
+      ]
+    },
+    "required_facts": [
+      [
+        "February 18, 2021",
+        "Feb. 18, 2021",
+        "Feb 18 2021"
+      ],
+      [
+        "Jezero Crater"
+      ],
+      [
+        "sky crane",
+        "skycrane"
+      ]
+    ],
+    "require_citation": true
+  },
+  {
+    "id": "research_008",
+    "title": "Connect the speed of light to the SI meter definition",
+    "question": "Using NIST sources, state the exact speed of light in vacuum and explain how that value defines the meter.",
+    "category": "multi_source_research",
+    "expected_answer": "The speed of light in vacuum is exactly 299,792,458 meters per second. One meter is the length of the path light travels in vacuum in 1/299,792,458 of a second.",
+    "accepted_variants": [
+      "c is exactly 299 792 458 m/s; the meter is the distance light travels in 1/299 792 458 second"
+    ],
+    "ground_truth_sources": [
+      "https://www.nist.gov/si-redefinition/meet-constants",
+      "https://www.nist.gov/si-redefinition/meter"
+    ],
+    "evidence_snapshot_id": "demo-v1",
+    "max_steps": 8,
+    "max_seconds": 75,
+    "difficulty": "medium",
+    "tier": 2,
+    "answerable": true,
+    "must_cite": true,
+    "query": "NIST speed of light exact value SI definition of meter one 299792458 second",
+    "evidence": {
+      "provenance": "offline_demo_fixture; manually curated source excerpts, not captured Tavily responses",
+      "results": [
+        {
+          "title": "Meet the Constants — NIST",
+          "url": "https://www.nist.gov/si-redefinition/meet-constants",
+          "content": "NIST states that c, the speed of light in vacuum, is equal to 299,792,458 meters per second."
+        },
+        {
+          "title": "Meter — NIST",
+          "url": "https://www.nist.gov/si-redefinition/meter",
+          "content": "NIST explains that one meter is the length of the path traveled by light in vacuum during 1/299,792,458 of a second; the definition fixes light speed at 299,792,458 meters per second."
+        }
+      ]
+    },
+    "answer_spec": {
+      "type": "regex",
+      "patterns": [
+        "299[ ,]?792[ ,]?458\\s*(?:meters per second|m/s|m s[−-]1)",
+        "1\\s*/\\s*299[ ,]?792[ ,]?458\\s*(?:of a )?second"
+      ]
+    },
+    "required_facts": [
+      [
+        "299,792,458 meters per second",
+        "299 792 458 m/s",
+        "299792458 m/s"
+      ],
+      [
+        "1/299,792,458 of a second",
+        "1/299 792 458 second",
+        "1/299792458 second"
+      ]
+    ],
+    "require_citation": true
+  }
+]

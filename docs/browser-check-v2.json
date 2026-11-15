@@ -1,0 +1,29 @@
+{
+  "passed": true,
+  "experiment_runs": 27,
+  "agents": 3,
+  "repetitions": 3,
+  "conditions": [
+    "baseline",
+    "search_failure",
+    "M3"
+  ],
+  "checks": [
+    "live SSE",
+    "actual 20s latency intervention",
+    "pass^3 display",
+    "leaderboard filter",
+    "score weight control",
+    "source-run drilldown",
+    "3x3 repeat grid",
+    "grader panel",
+    "trace expansion",
+    "paired first divergence",
+    "matrix navigation",
+    "JSON download",
+    "HTML report",
+    "reload",
+    "mobile rendering"
+  ],
+  "pageErrors": []
+}

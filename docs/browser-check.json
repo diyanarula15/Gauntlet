@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "pages": [
+    "overview",
+    "benchmark lab",
+    "experiment",
+    "trace",
+    "counterfactual",
+    "fault matrix",
+    "leaderboard",
+    "report"
+  ],
+  "checks": [
+    "form execution",
+    "completion polling",
+    "trace expansion",
+    "paired comparison",
+    "matrix navigation",
+    "JSON download",
+    "reload",
+    "mobile rendering"
+  ],
+  "pageErrors": []
+}

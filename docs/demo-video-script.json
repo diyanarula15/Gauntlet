@@ -1,0 +1,47 @@
+[
+  {
+    "title": "Why compare agents?",
+    "caption": "Same research task, different behavior when a dependency fails.",
+    "narration": "FAULTLINE runs agents through recorded model and search proxies. Here we compare their answers, requests, timing, and behavior when a dependency fails, so a benchmark shows how execution changed."
+  },
+  {
+    "title": "Set up the run",
+    "caption": "Three agents · research_001 · baseline and search failure · three repeats · offline.",
+    "narration": "Select all three registered agents, research_001, baseline and search failure, and three repeats. That makes eighteen planned runs. Offline mode uses simulated model responses and curated search evidence; no live provider is queried."
+  },
+  {
+    "title": "Run and watch",
+    "caption": "Actual agent processes run; progress and elapsed time are recorded.",
+    "narration": "Start the experiment and follow its live progress. FAULTLINE launches the actual agent processes and records their requests and elapsed times. Model outputs are simulated, and search results come from offline fixtures."
+  },
+  {
+    "title": "Trace the search failure",
+    "caption": "Inspect the retrying agent’s 500, 500, then 200 search responses.",
+    "narration": "Open a retrying-agent trace. The search proxy returns two HTTP 500 responses, then HTTP 200 on the third request. The event list shows the failure sequence and the agent’s recovery."
+  },
+  {
+    "title": "Compare paired runs",
+    "caption": "Baseline: one tool call. Faulted: three; two extra tools, zero extra model calls.",
+    "narration": "Compare this run with its baseline. The baseline made one tool call; the faulted run made three: two additional tool calls and zero additional model calls. It recovered with a grounded answer."
+  },
+  {
+    "title": "Compare retry policies",
+    "caption": "See SDK fail-fast and LangGraph traces beside the repeat grid.",
+    "narration": "Now inspect the SDK agent’s fail-fast trace and the LangGraph agent, then open the repeat grid. These runs show observed outcomes for each repeat; the grid keeps incomplete runs visible instead of treating them as failures."
+  },
+  {
+    "title": "Read the leaderboard",
+    "caption": "Compare clean pass¹, baseline pass³, and fault outcomes; costs remain unknown.",
+    "narration": "The leaderboard separates clean pass¹ from baseline pass³, which summarizes success across three observed repeats. Fault-exposed safe failures differ from recovery. Provider usage and cost are unknown here, not zero."
+  },
+  {
+    "title": "Inspect grades and export",
+    "caption": "Check retrieved-citation grounding, then export JSON or readable HTML.",
+    "narration": "Open a run’s grader details to see whether cited URLs were actually retrieved and whether that evidence supports the answer. Export the experiment as JSON with events or as a readable HTML report."
+  },
+  {
+    "title": "Integration status",
+    "caption": "Bifrost and Tavily live-provider quality has not been verified in this environment.",
+    "narration": "The integration panel shows Bifrost and Tavily configuration status. Live provider behavior and research quality have not been verified in this environment. FAULTLINE’s offline run demonstrates measured process control flow and trace capture."
+  }
+]

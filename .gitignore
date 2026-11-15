@@ -1,0 +1,19 @@
+# local environment and runtime files
+.venv/
+.env
+.env.*
+!.env.example
+data/
+__pycache__/
+.pytest_cache/
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+.DS_Store
+
+# demo recordings and media
+/demo/
+
+# planning and internal markdown; keep readmes
+*.md
+!README.md
