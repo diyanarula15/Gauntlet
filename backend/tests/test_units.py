@@ -114,7 +114,8 @@ def test_evaluator_timeout_canary_partial_citations_and_answer_correctness():
 
 def test_fixture_required_facts_and_citations_accept_evidence_but_require_all_facts():
     tasks = json.loads((Path(__file__).parents[1] / "app/fixtures/tasks.json").read_text())
-    for task in tasks:
+    # Unanswerable (abstention) and rubric-judged tasks have their own graders; see test_research_features.
+    for task in [t for t in tasks if t.get("answerable", True) and t["answer_spec"].get("type") != "rubric"]:
         evidence_answer = " ".join(f"{r['content']} [{r['url']}]" for r in task["evidence"]["results"])
         output = {"status": "completed", "answer": evidence_answer}
         assert evaluate(task, output, "completed")["outcome"] == "success", task["id"]

@@ -19,7 +19,31 @@
     "input_format": "json_stdin",
     "output_format": "json_stdout",
     "status": "approved",
-    "retry_policy": "3 total attempts on HTTP 5xx",
+    "retry_policy": "3 total attempts on HTTP 429 (Retry-After, default 1 s, capped 5 s) and 5xx",
+    "adapter": "cli",
+    "model_policy": "pinned"
+  },
+  {
+    "id": "fragile",
+    "display_name": "Fragile / no retries",
+    "framework": "Custom Python + httpx",
+    "language": "python",
+    "command": [
+      "{python}",
+      "agents/fragile_react/agent.py"
+    ],
+    "working_directory": ".",
+    "required_environment_variables": [
+      "OPENAI_BASE_URL",
+      "TAVILY_BASE_URL",
+      "BIFROST_MODEL",
+      "OPENAI_API_KEY",
+      "TAVILY_API_KEY"
+    ],
+    "input_format": "json_stdin",
+    "output_format": "json_stdout",
+    "status": "approved",
+    "retry_policy": "No retries (single attempt per call); failed searches are ignored",
     "adapter": "cli",
     "model_policy": "pinned"
   },
@@ -68,6 +92,30 @@
     "output_format": "json_stdout",
     "status": "approved",
     "retry_policy": "State graph, no implicit retries",
+    "model_policy": "pinned"
+  },
+  {
+    "id": "claude",
+    "display_name": "Claude-native Messages",
+    "framework": "Anthropic Messages API (httpx)",
+    "language": "python",
+    "command": [
+      "{python}",
+      "agents/claude_native/agent.py"
+    ],
+    "working_directory": ".",
+    "required_environment_variables": [
+      "ANTHROPIC_BASE_URL",
+      "ANTHROPIC_API_KEY",
+      "TAVILY_BASE_URL",
+      "BIFROST_MODEL",
+      "TAVILY_API_KEY"
+    ],
+    "input_format": "json_stdin",
+    "output_format": "json_stdout",
+    "status": "approved",
+    "retry_policy": "3 total attempts on model HTTP 429 and 5xx (Retry-After, default 1 s, capped 5 s); no retries on search errors, which are returned to the model as is_error tool results",
+    "adapter": "cli",
     "model_policy": "pinned"
   }
 ]

@@ -222,6 +222,64 @@ def _cell(task_id, scenario_id, planned_runs):
     )
 
 
+def _median_or_none(values):
+    values = [v for v in values if v is not None]
+    return median(values) if values else None
+
+
+def _agent_extras(scored, base_runs):
+    """Per-agent display fields: clean interval, medians, and per-fault label summaries."""
+    metric_runs = [r['metrics'] for r in scored]
+    clean_n = len(base_runs)
+    clean_successes = sum(r['evaluation'].get('outcome') == 'success' for r in base_runs)
+    token_values = [m.get('tokens') for m in metric_runs]
+    median_tokens = median(token_values) if token_values and all(t is not None for t in token_values) else None
+
+    fault_runs_by_scenario = defaultdict(list)
+    for run in scored:
+        if run.get('scenario_id') != 'baseline':
+            fault_runs_by_scenario[run['scenario_id']].append(run)
+    fault_labels = {}
+    for scenario_id, runs in fault_runs_by_scenario.items():
+        behaviors = [r['evaluation'].get('behavior') for r in runs]
+        counts = defaultdict(int)
+        for behavior in behaviors:
+            if behavior is not None:
+                counts[behavior] += 1
+        dominant = min(counts, key=lambda b: (-counts[b], b)) if counts else None
+        fault_labels[scenario_id] = dict(
+            n=len(runs),
+            label_counts=dict(counts),
+            dominant=dominant,
+            acceptable_rate=sum(b in ('recovered', 'safe_failure') for b in behaviors) / len(runs),
+            example_run_id=(next((r.get('id') for r in runs if r['evaluation'].get('behavior') == dominant), None)
+                            if dominant is not None else None),
+        )
+
+    # Calibration is measured on clean runs only: refusing because a tool is down is not abstention.
+    abstention_runs = [r for r in base_runs if r.get('evaluation', {}).get('answerable') is False]
+    abstention_n = len(abstention_runs)
+    abstention_correct = sum(r['evaluation'].get('behavior') == 'correct_abstention' for r in abstention_runs)
+    over_answered = sum(r['evaluation'].get('behavior') == 'silent_failure' for r in abstention_runs)
+
+    return dict(
+        abstention_n=abstention_n,
+        abstention_correct=abstention_correct,
+        abstention_rate=abstention_correct / abstention_n if abstention_n else None,
+        over_answer_rate=over_answered / abstention_n if abstention_n else None,
+        clean_n=clean_n,
+        clean_successes=clean_successes,
+        clean_interval=wilson(clean_successes, clean_n),
+        median_steps=_median_or_none([
+            m.get('steps') if m.get('steps') is not None else m.get('model_calls') for m in metric_runs
+        ]),
+        median_tool_calls=_median_or_none([m.get('tool_calls') for m in metric_runs]),
+        median_tokens=median_tokens,
+        median_latency_ms=_median_or_none([m.get('duration_ms') for m in metric_runs]),
+        fault_labels=fault_labels,
+    )
+
+
 def aggregate(runs):
     """Aggregate planned run records into agent/task/scenario cells and summaries."""
     by_agent = defaultdict(list)
@@ -292,6 +350,7 @@ def aggregate(runs):
             total_cost=total_cost, confidence_interval=wilson(successes, len(scored)),
             cells=cells, frontier=False, score=None,
             score_components=dict(S=clean_success, R=pass3, F=fault_tolerance, E=None),
+            **_agent_extras(scored, base_runs),
         ))
 
     costs = [entry['cost_per_success'] for entry in result if entry['cost_per_success'] is not None]
@@ -315,3 +374,39 @@ def aggregate(runs):
                                        and other['cost_per_success'] <= c and other['clean_success'] >= s
                                        and (other['cost_per_success'] < c or other['clean_success'] > s) for other in result)
     return sorted(result, key=lambda x: (x['score'] is None, -(x['score'] or 0), -(x['success_rate'] or 0)))
+
+
+def dose_response(runs):
+    """Success rate per agent, base scenario and dose level; baseline runs count as p=0.0."""
+    scored = [r for r in runs if isinstance(r.get('evaluation'), dict)]
+    dose_runs = [r for r in scored if isinstance(r.get('dose'), dict)]
+    base_runs = [r for r in scored if r.get('scenario_id') == 'baseline' and not isinstance(r.get('dose'), dict)]
+    bases = sorted({r['dose']['base'] for r in dose_runs})
+    result = {}
+    for agent in sorted({r['agent_id'] for r in dose_runs}):
+        per_base = {}
+        for base in bases:
+            cells = defaultdict(lambda: [0, 0])
+            matched = [r for r in dose_runs if r['agent_id'] == agent and r['dose']['base'] == base]
+            if not matched:
+                continue
+            for run in matched:
+                cell = cells[float(run['dose'].get('p', 0.0))]
+                cell[0] += run['evaluation'].get('outcome') == 'success'
+                cell[1] += 1
+            for run in base_runs:
+                if run['agent_id'] == agent:
+                    cell = cells[0.0]
+                    cell[0] += run['evaluation'].get('outcome') == 'success'
+                    cell[1] += 1
+            points = []
+            for p in sorted(cells):
+                successes, n = cells[p]
+                lo, hi = wilson(successes, n)
+                points.append(dict(p=p, n=n, successes=successes, rate=round(successes / n, 4),
+                                   lo=round(lo, 4), hi=round(hi, 4)))
+            breaking = next((pt['p'] for pt in points if pt['successes'] / pt['n'] < 0.5), None)
+            per_base[base] = dict(points=points, breaking_point=breaking)
+        if per_base:
+            result[agent] = per_base
+    return result

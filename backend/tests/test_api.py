@@ -15,7 +15,7 @@ def client(tmp_path,monkeypatch):
 
 def test_api_catalog_validation_export(client):
     assert client.get('/api/health').json()['status']=='ok'
-    assert len(client.get('/api/catalog').json()['tasks'])==8
+    assert len(client.get('/api/catalog').json()['tasks'])==12
     assert client.post('/api/experiments',json={'repetitions':0}).status_code==422
     assert client.post('/api/experiments',json={'agent_ids':['unknown']}).status_code==422
     assert client.post('/api/experiments',json={'scenario_ids':['search_failure']}).status_code==422
@@ -50,7 +50,8 @@ def test_proxy_rejects_and_snapshot_miss(tmp_path):
     h={'Authorization':'Bearer cap'}
     assert c.post('/proxy/missing/tavily/search',json={}).status_code==404
     assert c.post('/proxy/r/tavily/search',json={}).status_code==401
-    assert c.post('/proxy/r/v1/chat/completions',json={'stream':True},headers=h).status_code==400
+    streamed=c.post('/proxy/r/v1/chat/completions',json={'stream':True,'messages':[]},headers=h)
+    assert streamed.status_code==200 and streamed.headers['content-type'].startswith('text/event-stream') and streamed.text.rstrip().endswith('data: [DONE]')
     assert c.post('/proxy/r/tavily/search',json={'query':'unseen'},headers=h).status_code==422
     assert store.events('r')[-1]['snapshot_miss']
     r=store.get('run','r');r['status']='completed';store.put('run',r)
@@ -118,7 +119,7 @@ def test_live_capture_commits_immutable_response(client,monkeypatch):
     r=client.post('/api/snapshots/capture',json={})
     assert r.status_code==201
     assert 'capture-secret' not in r.text
-    snap=r.json();assert len(snap['entries'])==8
+    snap=r.json();assert len(snap['entries'])==12
     saved=client.app.state.store.get_snapshot(snap['snapshot_id'])
     assert saved==snap
     client.app.state.store.snapshot({**snap,'entries':{}})

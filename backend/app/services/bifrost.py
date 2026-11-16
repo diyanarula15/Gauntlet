@@ -20,6 +20,18 @@ async def forward(settings, payload, run_id, request_id=None, model_policy='pinn
         return await client.post(settings.bifrost_base_url.rstrip('/') + '/v1/chat/completions', json=body, headers=headers)
 
 
+async def forward_anthropic(settings, payload, run_id, request_id=None, model_policy='pinned'):
+    """Native Anthropic Messages transport through Bifrost's Anthropic-compatible route."""
+    headers = {'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'x-bf-lh-run-id': run_id, 'x-bf-session-id': run_id, **auth_headers(settings)}
+    if settings.bifrost_api_key: headers['x-api-key'] = settings.bifrost_api_key
+    if request_id: headers['x-request-id'] = request_id
+    body = {**payload, 'stream': False}
+    if model_policy == 'pinned': body['model'] = settings.bifrost_model
+    body['max_tokens'] = min(int(body.get('max_tokens') or settings.max_output_tokens), settings.max_output_tokens)
+    async with httpx.AsyncClient(timeout=settings.model_timeout_seconds) as client:
+        return await client.post(settings.bifrost_base_url.rstrip('/') + '/anthropic/v1/messages', json=body, headers=headers)
+
+
 async def health(settings):
     try:
         async with httpx.AsyncClient(timeout=2) as client:

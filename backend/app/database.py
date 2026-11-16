@@ -6,6 +6,34 @@ from datetime import datetime, timezone
 def now():
     return datetime.now(timezone.utc).isoformat()
 
+_EVENT_TYPE_NAMES = {
+    'RUN_STARTED': 'run_start',
+    'RUN_FINISHED': 'run_end',
+    'FAULT_INJECTED': 'fault',
+    'BUDGET_EXCEEDED': 'limit',
+    'RUN_TIMEOUT': 'limit',
+    'AGENT_LOG': 'log',
+}
+
+def _event_view(obj):
+    """Return a copy of a stored event with read-time display fields added."""
+    event_type = obj.get('event_type')
+    service = obj.get('service')
+    if event_type == 'CALL' and service == 'model':
+        kind = 'model_call'
+    elif event_type == 'CALL' and service in ('search', 'extract'):
+        kind = 'tool_call'
+    elif event_type in _EVENT_TYPE_NAMES:
+        kind = _EVENT_TYPE_NAMES[event_type]
+    else:
+        kind = str(event_type or '').lower()
+    view = dict(obj)
+    view.update(seq=obj.get('sequence_number'), ts_start=obj.get('timestamp'), type=kind)
+    fault = obj.get('fault')
+    if isinstance(fault, dict):
+        view['injected_fault_id'] = fault.get('scenario_id') or fault.get('id') or fault.get('intervention')
+    return view
+
 class Store:
     def __init__(self, path):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -42,7 +70,7 @@ class Store:
     def events(self, run_id):
         with self.connect() as db:
             rows=db.execute('SELECT data FROM events WHERE run_id=? ORDER BY seq',(run_id,)).fetchall()
-        return [json.loads(r[0]) for r in rows]
+        return [_event_view(json.loads(r[0])) for r in rows]
     def snapshot(self, obj):
         with self.connect() as db:
             db.execute('INSERT OR IGNORE INTO snapshots VALUES(?,?)',(obj['snapshot_id'],json.dumps(obj)))

@@ -78,7 +78,11 @@
         "research_001": "Python 3.10.0 was released on October 5, 2021.",
         "research_002": "Voyager 1 launched on September 6, 1977, aboard a Titan IIIE-Centaur.",
         "research_003": "The Apollo 11 mission lasted 8 days, 13 hours, and 18 minutes.",
-        "research_004": "Apollo 11 launched on July 20, 1969, carrying the first crew to land on the Moon."
+        "research_004": "Apollo 11 launched on July 20, 1969, carrying the first crew to land on the Moon.",
+        "research_005": "The speed of light in vacuum is exactly 299,792,458 kilometers per second.",
+        "research_006": "NASA gives Mars an average distance of 142 million kilometers from the Sun.",
+        "research_007": "Perseverance landed in Gale Crater on February 18, 2021, lowered by its sky crane.",
+        "research_008": "The speed of light in vacuum is exactly 299,792,458 kilometers per second, which defines the meter."
       }
     },
     "provenance": "faultline_demo_scenario_definition"
@@ -153,6 +157,22 @@
     "effect": {
       "kind": "latency",
       "seconds": 20
+    },
+    "scope": "run"
+  },
+  {
+    "id": "M4",
+    "display_name": "Primary provider outage (gateway failover)",
+    "description": "The primary model provider fails on every request and the gateway's fallback chain serves it. Tests whether infrastructure absorbs the fault, and what it costs in latency and money.",
+    "version": 1,
+    "service": "model",
+    "layer": "model",
+    "trigger": {
+      "kind": "always"
+    },
+    "effect": {
+      "kind": "provider_failover",
+      "primary_seconds": 0.25
     },
     "scope": "run"
   },

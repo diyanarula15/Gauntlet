@@ -1,10 +1,15 @@
-import { AgentIdentity, BehaviorBadge } from "./ArenaPanels";
+import "./research.css";
+import { AgentIdentity, BehaviorBadge, agentColors } from "./ArenaPanels";
 import { PixelIcon } from "./ArenaAssets";
 import { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   ScatterChart,
   Scatter,
+  ComposedChart,
+  Area,
+  Line,
+  ReferenceLine,
   XAxis,
   YAxis,
   Tooltip,
@@ -21,6 +26,332 @@ const value = (x: number | null | undefined, unit = "") =>
     : `${x.toLocaleString(undefined, { maximumFractionDigits: 2 })}${unit}`;
 const money = (x: number | null | undefined) =>
   x == null ? "Unknown" : `$${x.toFixed(5)}`;
+const dashNum = (x: number | null | undefined) =>
+  x == null ? "—" : x.toLocaleString(undefined, { maximumFractionDigits: 2 });
+const dashPct = (x: number | null | undefined) =>
+  x == null ? "—" : `${(100 * x).toFixed(1)}%`;
+const dashMoney = (x: number | null | undefined) =>
+  x == null ? "—" : `$${x.toFixed(5)}`;
+const dashSecs = (ms: number | null | undefined) =>
+  ms == null ? "—" : `${(ms / 1000).toFixed(1)} s`;
+const interval = (x: unknown): [number, number] | null =>
+  Array.isArray(x) &&
+  x.length === 2 &&
+  typeof x[0] === "number" &&
+  typeof x[1] === "number"
+    ? [x[0], x[1]]
+    : null;
+const ciText = (x: unknown) => {
+  const ci = interval(x);
+  return ci ? ` [${dashPct(ci[0])}–${dashPct(ci[1])}]` : "";
+};
+// asc: lower is better, so ascending order. Missing values always sort last.
+const SORTS: Record<
+  string,
+  { label: string; get: (r: Row) => number | null | undefined; asc?: boolean }
+> = {
+  pass_3: { label: "pass^3", get: (r) => r.pass_3 },
+  abstention: {
+    label: "Abstention (highest)",
+    get: (r) => r.abstention_rate,
+  },
+  clean_success: { label: "Clean success", get: (r) => r.clean_success },
+  fault_tolerance: { label: "Fault tolerance", get: (r) => r.fault_tolerance },
+  viewer_score: { label: "Weighted score", get: (r) => r.viewer_score },
+  efficiency: { label: "Efficiency (E)", get: (r) => r.score_components?.E },
+  median_steps: { label: "Steps (fewest)", get: (r) => r.median_steps, asc: true },
+  median_tool_calls: {
+    label: "Tool calls (fewest)",
+    get: (r) => r.median_tool_calls,
+    asc: true,
+  },
+  median_tokens: {
+    label: "Tokens (fewest)",
+    get: (r) => r.median_tokens,
+    asc: true,
+  },
+  cost_per_success: {
+    label: "Cost / success (lowest)",
+    get: (r) => r.cost_per_success,
+    asc: true,
+  },
+  median_latency_ms: {
+    label: "Time (fastest)",
+    get: (r) => r.median_latency_ms,
+    asc: true,
+  },
+};
+
+const signedPts = (x: number | null | undefined) =>
+  x == null
+    ? "—"
+    : `${x >= 0 ? "+" : ""}${(100 * x).toFixed(1)}`;
+const pValue = (x: number | null | undefined) =>
+  x == null ? "—" : x.toFixed(4);
+const behaviorText = (b: string) =>
+  b === "correct_abstention" ? "Correct abstention" : b;
+const judgeMethod = (m: string | null | undefined) =>
+  m === "llm_rubric_judge"
+    ? "LLM judge"
+    : m === "keyword_rubric_fallback"
+      ? "Keyword fallback (offline)"
+      : m || "Unknown";
+
+// McNemar verdicts on paired baseline runs. diff is taken as rate(a) - rate(b);
+// comparisons are re-oriented so the leader is always listed first.
+function Significance({
+  significance,
+  name,
+}: {
+  significance: Row | null;
+  name: (id: string) => string;
+}) {
+  const comparisons: Row[] = significance?.comparisons ?? [];
+  const leader: string | undefined = significance?.leader;
+  return (
+    <div className="research-block" aria-label="Significance">
+      <h3>Is the gap real?</h3>
+      {comparisons.length ? (
+        <ul className="sig-list">
+          {comparisons.map((c: Row) => {
+            const flip = leader === c.agent_b && leader !== c.agent_a;
+            const lead = flip ? c.agent_b : c.agent_a;
+            const other = flip ? c.agent_a : c.agent_b;
+            const d = flip ? -c.diff : c.diff;
+            const lo = flip ? -c.diff_hi : c.diff_lo;
+            const hi = flip ? -c.diff_lo : c.diff_hi;
+            return (
+              <li
+                className="sig-row"
+                key={`${c.agent_a}-${c.agent_b}`}
+              >
+                <span>
+                  <b>
+                    {name(lead)} vs {name(other)}
+                  </b>
+                  : {signedPts(d)} pts [{signedPts(lo)}, {signedPts(hi)}] ·
+                  McNemar p = {pValue(c.p_value)} (Holm{" "}
+                  {pValue(c.p_holm)}) · n pairs = {c.n_pairs ?? "—"} ·
+                  discordant {c.a_only ?? "—"}/{c.b_only ?? "—"}
+                </span>
+                <span
+                  className={
+                    "research-chip" + (c.established ? " established" : "")
+                  }
+                >
+                  {c.established ? "established" : "not established"}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="muted">
+          Need at least two agents with paired baseline runs.
+        </p>
+      )}
+      {significance?.method && <small>{significance.method}</small>}
+    </div>
+  );
+}
+
+// Dose-response per base fault: success rate against fault probability.
+function DoseResponse({
+  dose,
+  catalog,
+  name,
+}: {
+  dose: Row;
+  catalog: Row;
+  name: (id: string) => string;
+}) {
+  const bases = Array.from(
+    new Set(Object.values(dose).flatMap((byBase: any) => Object.keys(byBase || {}))),
+  );
+  if (!bases.length) return null;
+  return (
+    <div className="research-block">
+      <h3>Breaking point</h3>
+      <div className="dose-grid">
+        {bases.map((base) => {
+          const agentIds = Object.keys(dose).filter((id) => dose[id]?.[base]);
+          const ps = Array.from(
+            new Set(
+              agentIds.flatMap((id) =>
+                dose[id][base].points.map((pt: Row) => pt.p as number),
+              ),
+            ),
+          ).sort((a, b) => a - b);
+          const data = ps.map((p) => {
+            const row: Row = { p };
+            agentIds.forEach((id, i) => {
+              const pt = dose[id][base].points.find((q: Row) => q.p === p);
+              if (pt) {
+                row[`r${i}`] = pt.rate;
+                row[`b${i}`] = [pt.lo, pt.hi];
+              }
+            });
+            return row;
+          });
+          const colour = (id: string) =>
+            agentColors[
+              Math.max(
+                0,
+                catalog.agents.findIndex((a: Row) => a.id === id),
+              ) % agentColors.length
+            ];
+          return (
+            <div className="dose-card" key={base}>
+              <h4>{base}</h4>
+              <ResponsiveContainer width="100%" height={220}>
+                <ComposedChart
+                  data={data}
+                  margin={{ top: 15, right: 20, left: 0, bottom: 10 }}
+                >
+                  <CartesianGrid stroke="#D9D0BD" strokeDasharray="3 5" />
+                  <XAxis
+                    type="number"
+                    dataKey="p"
+                    domain={[0, 1]}
+                    ticks={ps}
+                    name="Fault probability"
+                    tickFormatter={(x) => Number(x).toFixed(2)}
+                    stroke="#5B5668"
+                  />
+                  <YAxis
+                    type="number"
+                    domain={[0, 1]}
+                    ticks={[0, 0.25, 0.5, 0.75, 1]}
+                    tickFormatter={(x) => `${Math.round(100 * x)}%`}
+                    stroke="#5B5668"
+                  />
+                  <Tooltip
+                    formatter={(v: any) =>
+                      Array.isArray(v)
+                        ? `${rate(v[0])} – ${rate(v[1])}`
+                        : rate(v)
+                    }
+                    labelFormatter={(p: any) => `p = ${Number(p).toFixed(2)}`}
+                  />
+                  <ReferenceLine
+                    y={0.5}
+                    stroke="#5B5668"
+                    strokeDasharray="4 4"
+                    label={{ value: "50%", fill: "#5B5668", fontSize: 10 }}
+                  />
+                  {agentIds.map((id, i) => (
+                    <Area
+                      key={`band-${id}`}
+                      dataKey={`b${i}`}
+                      type="linear"
+                      stroke="none"
+                      fill={colour(id)}
+                      fillOpacity={0.14}
+                      connectNulls
+                      isAnimationActive={false}
+                    />
+                  ))}
+                  {agentIds.map((id, i) => (
+                    <Line
+                      key={`line-${id}`}
+                      dataKey={`r${i}`}
+                      name={name(id)}
+                      type="linear"
+                      stroke={colour(id)}
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      connectNulls
+                      isAnimationActive={false}
+                    />
+                  ))}
+                </ComposedChart>
+              </ResponsiveContainer>
+              <ul className="breakpoints">
+                {agentIds.map((id) => {
+                  const bp = dose[id][base].breaking_point;
+                  return (
+                    <li key={id}>
+                      {name(id)}:{" "}
+                      {bp == null
+                        ? "holds above 50% at every tested level"
+                        : `breaking point p = ${Number(bp).toFixed(2)}`}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function JudgeBlock({ id, judge }: { id: string; judge: Row }) {
+  const criteria: Row[] = judge.criteria ?? [];
+  return (
+    <div className="judge-block">
+      <div className="judge-head">
+        <h4>Rubric judge · {id}</h4>
+        <span
+          className={
+            "research-chip" + (judge.passed === true ? " established" : "")
+          }
+        >
+          {judge.passed === true
+            ? "Passed"
+            : judge.passed === false
+              ? "Not passed"
+              : "Unverified"}
+        </span>
+      </div>
+      <div className="judge-meta">
+        <span>
+          Method <b>{judgeMethod(judge.method)}</b>
+        </span>
+        <span>
+          Model <b>{judge.model || "—"}</b>
+        </span>
+        <span>
+          Score <b>{dashNum(judge.score)}</b>
+        </span>
+      </div>
+      {judge.judge_error && (
+        <p className="orange" role="alert">
+          Judge error: {judge.judge_error}
+        </p>
+      )}
+      {criteria.length ? (
+        <div className="table-scroll">
+          <table className="judge-table">
+            <thead>
+              <tr>
+                <th>Criterion</th>
+                <th>Met</th>
+                <th>Weight</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {criteria.map((c: Row, i: number) => (
+                <tr key={c.id ?? i}>
+                  <td>{c.id ?? "—"}</td>
+                  <td className={c.met ? "green" : "orange"}>
+                    {c.met ? "✓" : "✗"}
+                  </td>
+                  <td>{dashNum(c.weight)}</td>
+                  <td>{c.reason || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <small className="muted">No criteria recorded.</small>
+      )}
+    </div>
+  );
+}
 
 export function ReliabilityBoard({
   experiment,
@@ -37,9 +368,17 @@ export function ReliabilityBoard({
     [sort, setSort] = useState("pass_3"),
     [weights, setWeights] = useState({ S: 40, R: 25, F: 20, E: 15 }),
     [drill, setDrill] = useState<string | null>(null),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [significance, setSignificance] = useState<Row | null>(null),
+    [dose, setDose] = useState<Row>({});
   const name = (id: string) =>
     catalog.agents.find((a: Row) => a.id === id)?.display_name || id;
+  useEffect(() => {
+    setRows(experiment.leaderboard);
+    setSignificance(null);
+    setDose({});
+    setError("");
+  }, [experiment.id]);
   useEffect(() => {
     let disposed = false;
     const params = new URLSearchParams();
@@ -51,7 +390,12 @@ export function ReliabilityBoard({
         return r.json();
       })
       .then((data) => {
-        if (!disposed) setRows(data.rows);
+        if (!disposed) {
+          setRows(data.rows);
+          setSignificance(data.significance ?? null);
+          setDose(data.dose_response ?? {});
+          setError("");
+        }
       })
       .catch((e) => {
         if (!disposed) setError(String(e));
@@ -77,7 +421,14 @@ export function ReliabilityBoard({
               : null;
           return { ...row, viewer_score: score };
         })
-        .sort((a, b) => (b[sort] ?? -Infinity) - (a[sort] ?? -Infinity)),
+        .sort((a, b) => {
+          const spec = SORTS[sort] ?? SORTS.pass_3;
+          const x = spec.get(a);
+          const y = spec.get(b);
+          if (x == null || y == null)
+            return x == null && y == null ? 0 : x == null ? 1 : -1;
+          return spec.asc ? x - y : y - x;
+        }),
     [rows, weights, sort],
   );
   const plotted = ranked.filter(
@@ -112,6 +463,7 @@ export function ReliabilityBoard({
               <option value="all">All tiers</option>
               <option value="1">1 · lookup</option>
               <option value="2">2 · multi-hop</option>
+              <option value="3">3 · synthesis (rubric)</option>
             </select>
           </label>
           <label>
@@ -134,10 +486,11 @@ export function ReliabilityBoard({
               value={sort}
               onChange={(e) => setSort(e.target.value)}
             >
-              <option value="pass_3">pass^3</option>
-              <option value="clean_success">Clean success</option>
-              <option value="fault_tolerance">Fault tolerance</option>
-              <option value="viewer_score">Weighted score</option>
+              {Object.entries(SORTS).map(([key, s]) => (
+                <option key={key} value={key}>
+                  {s.label}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -234,15 +587,21 @@ export function ReliabilityBoard({
           <thead>
             <tr>
               <th>Agent</th>
+              <th>Score</th>
               <th>S · clean</th>
               <th>pass^1</th>
-              <th>pass^3</th>
+              <th>R · pass^3</th>
               <th>pass^5</th>
-              <th>Recovered</th>
               <th>F · acceptable</th>
+              <th>Recovered</th>
+              <th>Abstains</th>
+              <th>E · efficiency</th>
+              <th>Steps</th>
+              <th>Tool calls</th>
+              <th>Tokens</th>
               <th>Cost / success</th>
+              <th>Time</th>
               <th>Observed / planned</th>
-              <th>Score</th>
               <th>Inspect</th>
             </tr>
           </thead>
@@ -263,17 +622,44 @@ export function ReliabilityBoard({
                       : "Pinned: " + experiment.config.model}
                   </small>
                 </td>
-                <td>{rate(r.clean_success)}</td>
-                <td>{rate(r.pass_1)}</td>
-                <td className="violet-text">{rate(r.pass_3)}</td>
-                <td>{rate(r.pass_5)}</td>
-                <td>{rate(r.recovery_rate)}</td>
-                <td>{rate(r.fault_tolerance)}</td>
-                <td>{money(r.cost_per_success)}</td>
+                <td>{dashNum(r.viewer_score)}</td>
+                <td>
+                  {dashPct(r.clean_success)}
+                  <small className="muted">
+                    {" "}
+                    n={r.clean_n ?? "—"}
+                    {ciText(r.clean_interval)}
+                  </small>
+                </td>
+                <td>{dashPct(r.pass_1)}</td>
+                <td className="violet-text">{dashPct(r.pass_3)}</td>
+                <td>{dashPct(r.pass_5)}</td>
+                <td>{dashPct(r.fault_tolerance)}</td>
+                <td>{dashPct(r.recovery_rate)}</td>
+                <td
+                  title={`Correct refusals on unanswerable tasks; over-answer rate ${dashPct(r.over_answer_rate)}`}
+                >
+                  {r.abstention_n ? (
+                    <>
+                      {r.abstention_correct ?? 0}/{r.abstention_n}
+                      <small className="muted">
+                        {" "}
+                        {dashPct(r.abstention_rate)}
+                      </small>
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td>{dashPct(r.score_components?.E)}</td>
+                <td>{dashNum(r.median_steps)}</td>
+                <td>{dashNum(r.median_tool_calls)}</td>
+                <td>{dashNum(r.median_tokens)}</td>
+                <td>{dashMoney(r.cost_per_success)}</td>
+                <td>{dashSecs(r.median_latency_ms)}</td>
                 <td>
                   {r.runs} / {r.planned_runs}
                 </td>
-                <td>{value(r.viewer_score)}</td>
                 <td>
                   <button
                     className="textbutton"
@@ -289,6 +675,8 @@ export function ReliabilityBoard({
           </tbody>
         </table>
       </div>
+      <Significance significance={significance} name={name} />
+      <DoseResponse dose={dose} catalog={catalog} name={name} />
       {drill && (
         <div className="drilldown">
           <h3>{name(drill)} · source observations</h3>
@@ -416,6 +804,7 @@ export function RepeatComparison({
                         {runs
                           .map((r: Row) => r.evaluation?.behavior)
                           .filter(Boolean)
+                          .map(behaviorText)
                           .join(" · ")}
                       </small>
                     </td>
@@ -473,6 +862,11 @@ export function GradingPanel({ run }: { run: Row }) {
           ),
         )}
       </div>
+      {Object.entries(run.evaluation?.grades || {})
+        .filter(([, grade]: [string, any]) => grade?.judge)
+        .map(([key, grade]: [string, any]) => (
+          <JudgeBlock key={key} id={key} judge={grade.judge} />
+        ))}
       <div className="inspector-metrics">
         <span>
           Model steps <b>{metrics.steps ?? "—"}</b>
@@ -533,17 +927,25 @@ export function LiveTrace({ runId }: { runId: string }) {
   useEffect(() => {
     setEvents([]);
     setError(false);
+    let received = false;
     const stream = new EventSource(`/api/runs/${runId}/events`);
     stream.onmessage = (e) => {
-      const next = JSON.parse(e.data);
+      let next: Row;
+      try {
+        next = JSON.parse(e.data);
+      } catch {
+        return;
+      }
+      if (!next || typeof next !== "object") return;
+      received = true;
       setEvents((rows) =>
         rows.some((row) => row.id === next.id) ? rows : [...rows, next],
       );
       if (next.event_type === "RUN_FINISHED") stream.close();
     };
     stream.onerror = () => {
-      setError(true);
       stream.close();
+      if (!received) setError(true);
     };
     return () => stream.close();
   }, [runId]);

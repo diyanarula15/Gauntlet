@@ -23,4 +23,7 @@ class Settings(BaseSettings):
     docker_harness_base_url: str = 'http://host.docker.internal:8017'
     default_max_cost_usd: float | None = None
     max_output_tokens: int = 1024
+    judge_model: str | None = None
+    outage_primary_model: str | None = None
+    fallback_model: str | None = None
 settings = Settings()

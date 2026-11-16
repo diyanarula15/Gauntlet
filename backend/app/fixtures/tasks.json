@@ -345,7 +345,11 @@
         "m s−1"
       ]
     ],
-    "require_citation": true
+    "require_citation": true,
+    "forbidden_answers": [
+      "299,792,458 kilometers per second",
+      "299792458 km/s"
+    ]
   },
   {
     "id": "research_006",
@@ -392,7 +396,11 @@
         "227900000 kilometers"
       ]
     ],
-    "require_citation": true
+    "require_citation": true,
+    "forbidden_answers": [
+      "142 million kilometers",
+      "142 million km"
+    ]
   },
   {
     "id": "research_007",
@@ -467,7 +475,10 @@
         "skycrane"
       ]
     ],
-    "require_citation": true
+    "require_citation": true,
+    "forbidden_answers": [
+      "landed in Gale Crater"
+    ]
   },
   {
     "id": "research_008",
@@ -524,6 +535,296 @@
         "1/299792458 second"
       ]
     ],
-    "require_citation": true
+    "require_citation": true,
+    "forbidden_answers": [
+      "299,792,458 kilometers per second",
+      "299792458 km/s"
+    ]
+  },
+  {
+    "id": "research_009",
+    "title": "Ask for an attendance figure the sources do not give",
+    "question": "According to Python.org, how many people attended the Python 3.10.0 release-day livestream?",
+    "category": "unanswerable",
+    "expected_answer": "The retrieved sources do not contain this information.",
+    "accepted_variants": [],
+    "ground_truth_sources": [
+      "https://www.python.org/downloads/release/python-3100/"
+    ],
+    "evidence_snapshot_id": "demo-v1",
+    "max_steps": 10,
+    "max_seconds": 90,
+    "difficulty": "hard",
+    "query": "Python.org Python 3.10.0 release day livestream attendance",
+    "evidence": {
+      "provenance": "offline_demo_fixture; manually curated source excerpt, not a captured Tavily response",
+      "results": [
+        {
+          "title": "Python Release Python 3.10.0",
+          "url": "https://www.python.org/downloads/release/python-3100/",
+          "content": "Python.org's Python 3.10.0 release page lists the release date as Oct. 4, 2021."
+        }
+      ]
+    },
+    "required_facts": [],
+    "require_citation": false,
+    "tier": 2,
+    "answerable": false,
+    "must_cite": false,
+    "answer_spec": {
+      "type": "abstain"
+    },
+    "forbidden_answers": []
+  },
+  {
+    "id": "research_010",
+    "title": "Ask for a launch-day ticket price the sources do not give",
+    "question": "What was the exact launch-day price in US dollars of a ticket to watch the Perseverance rover launch from the NASA visitor complex?",
+    "category": "unanswerable",
+    "expected_answer": "The retrieved sources do not contain this information.",
+    "accepted_variants": [],
+    "ground_truth_sources": [
+      "https://www.nasa.gov/mission/mars-2020-perseverance/"
+    ],
+    "evidence_snapshot_id": "demo-v1",
+    "max_steps": 10,
+    "max_seconds": 90,
+    "difficulty": "hard",
+    "query": "Perseverance rover launch viewing ticket price NASA visitor complex",
+    "evidence": {
+      "provenance": "offline_demo_fixture; manually curated source excerpt, not a captured Tavily response",
+      "results": [
+        {
+          "title": "Mars 2020 Perseverance — NASA",
+          "url": "https://www.nasa.gov/mission/mars-2020-perseverance/",
+          "content": "NASA's Mars 2020 Perseverance mission page says the rover launched from Cape Canaveral, Florida, in July 2020 and lists its landing site as Jezero Crater."
+        }
+      ]
+    },
+    "required_facts": [],
+    "require_citation": false,
+    "tier": 2,
+    "answerable": false,
+    "must_cite": false,
+    "answer_spec": {
+      "type": "abstain"
+    },
+    "forbidden_answers": []
+  },
+  {
+    "id": "research_011",
+    "title": "Compare Python 3.10.0 and 3.11.0 release dates",
+    "question": "Using Python.org, compare the release dates of Python 3.10.0 and Python 3.11.0 and say which came first and roughly how many months apart they were.",
+    "category": "multi_source_synthesis",
+    "expected_answer": "Python 3.10.0 came first, released October 4, 2021. Python 3.11.0 followed on October 24, 2022, roughly 12 months later.",
+    "accepted_variants": [],
+    "ground_truth_sources": [
+      "https://www.python.org/downloads/release/python-3100/",
+      "https://www.python.org/downloads/release/python-3110/"
+    ],
+    "evidence_snapshot_id": "demo-v1",
+    "max_steps": 10,
+    "max_seconds": 90,
+    "difficulty": "hard",
+    "query": "Python 3.10.0 and 3.11.0 release dates compared Python.org",
+    "evidence": {
+      "provenance": "offline_demo_fixture; manually curated source excerpts, not captured Tavily responses",
+      "results": [
+        {
+          "title": "Python Release Python 3.10.0",
+          "url": "https://www.python.org/downloads/release/python-3100/",
+          "content": "Python.org's Python 3.10.0 release page lists the release date as Oct. 4, 2021."
+        },
+        {
+          "title": "Python Release Python 3.11.0",
+          "url": "https://www.python.org/downloads/release/python-3110/",
+          "content": "Python.org's Python 3.11.0 release page lists the release date as October 24, 2022, roughly one year after Python 3.10.0, which came first."
+        }
+      ]
+    },
+    "required_facts": [
+      [
+        "October 4, 2021",
+        "Oct. 4, 2021",
+        "2021-10-04"
+      ],
+      [
+        "October 24, 2022",
+        "Oct. 24, 2022",
+        "2022-10-24"
+      ],
+      [
+        "came first",
+        "released first",
+        "earlier"
+      ]
+    ],
+    "require_citation": true,
+    "tier": 3,
+    "answerable": true,
+    "must_cite": true,
+    "answer_spec": {
+      "type": "rubric",
+      "pass_threshold": 0.75,
+      "criteria": [
+        {
+          "id": "release_dates",
+          "description": "States the release dates October 4, 2021 (3.10.0) and October 24, 2022 (3.11.0).",
+          "weight": 0.4,
+          "evidence_terms": [
+            [
+              "October 4, 2021",
+              "Oct. 4, 2021",
+              "2021-10-04"
+            ],
+            [
+              "October 24, 2022",
+              "Oct. 24, 2022",
+              "2022-10-24"
+            ]
+          ]
+        },
+        {
+          "id": "which_first",
+          "description": "Says Python 3.10.0 came first.",
+          "weight": 0.3,
+          "evidence_terms": [
+            [
+              "Python 3.10.0",
+              "3.10.0"
+            ],
+            [
+              "came first",
+              "released first",
+              "earlier"
+            ]
+          ]
+        },
+        {
+          "id": "months_apart",
+          "description": "Gives the gap as roughly 12 months (about one year).",
+          "weight": 0.3,
+          "evidence_terms": [
+            [
+              "12 months",
+              "twelve months",
+              "one year",
+              "a year",
+              "1 year"
+            ]
+          ]
+        }
+      ]
+    },
+    "forbidden_answers": [
+      "Python 3.11.0 came first",
+      "Python 3.11.0 was released before Python 3.10.0"
+    ]
+  },
+  {
+    "id": "research_012",
+    "title": "Name the Jezero and Gale rovers and landing details",
+    "question": "Using NASA sources, name the rover that landed in Jezero Crater and the landing date, and the crater where the Curiosity rover landed.",
+    "category": "multi_source_synthesis",
+    "expected_answer": "Perseverance landed in Jezero Crater on February 18, 2021. Curiosity landed in Gale Crater.",
+    "accepted_variants": [],
+    "ground_truth_sources": [
+      "https://science.nasa.gov/mission/mars-2020-perseverance/",
+      "https://science.nasa.gov/mission/msl-curiosity/"
+    ],
+    "evidence_snapshot_id": "demo-v1",
+    "max_steps": 10,
+    "max_seconds": 90,
+    "difficulty": "hard",
+    "query": "NASA rover that landed in Jezero Crater landing date and Curiosity landing crater Gale",
+    "evidence": {
+      "provenance": "offline_demo_fixture; manually curated source excerpts, not captured Tavily responses",
+      "results": [
+        {
+          "title": "Mars 2020 Perseverance — NASA",
+          "url": "https://science.nasa.gov/mission/mars-2020-perseverance/",
+          "content": "NASA's Mars 2020 Perseverance page says the rover landed in Jezero Crater on Feb. 18, 2021."
+        },
+        {
+          "title": "Mars Science Laboratory Curiosity — NASA",
+          "url": "https://science.nasa.gov/mission/msl-curiosity/",
+          "content": "NASA's Curiosity page says the Mars Science Laboratory rover, Curiosity, landed in Gale Crater in August 2012."
+        }
+      ]
+    },
+    "required_facts": [
+      [
+        "Perseverance"
+      ],
+      [
+        "Jezero Crater"
+      ],
+      [
+        "February 18, 2021",
+        "Feb. 18, 2021",
+        "Feb 18 2021"
+      ],
+      [
+        "Curiosity"
+      ],
+      [
+        "Gale Crater"
+      ]
+    ],
+    "require_citation": true,
+    "tier": 3,
+    "answerable": true,
+    "must_cite": true,
+    "answer_spec": {
+      "type": "rubric",
+      "pass_threshold": 0.75,
+      "criteria": [
+        {
+          "id": "jezero_rover",
+          "description": "Names Perseverance as the rover that landed in Jezero Crater.",
+          "weight": 0.3,
+          "evidence_terms": [
+            [
+              "Perseverance"
+            ],
+            [
+              "Jezero Crater",
+              "Jezero"
+            ]
+          ]
+        },
+        {
+          "id": "landing_date",
+          "description": "Gives the Perseverance landing date as February 18, 2021.",
+          "weight": 0.3,
+          "evidence_terms": [
+            [
+              "February 18, 2021",
+              "Feb. 18, 2021",
+              "Feb 18 2021",
+              "2021-02-18"
+            ]
+          ]
+        },
+        {
+          "id": "curiosity_crater",
+          "description": "Names Gale Crater as the crater where Curiosity landed.",
+          "weight": 0.4,
+          "evidence_terms": [
+            [
+              "Gale Crater",
+              "Gale"
+            ],
+            [
+              "Curiosity"
+            ]
+          ]
+        }
+      ]
+    },
+    "forbidden_answers": [
+      "Perseverance landed in Gale Crater",
+      "Curiosity landed in Jezero Crater"
+    ]
   }
 ]

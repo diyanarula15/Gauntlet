@@ -39,6 +39,14 @@ import {
 } from "./ArenaPanels";
 import { AgentAvatar, PixelIcon } from "./ArenaAssets";
 import {
+  CompareWithSelect,
+  EventDetail,
+  FaultCellLabel,
+  Postmortem,
+  TraceTotalsStats,
+  runLabel,
+} from "./InspectorPanels";
+import {
   ReliabilityBoard,
   RepeatComparison,
   GradingPanel,
@@ -57,10 +65,18 @@ async function api(path: string, body?: Obj) {
       : undefined,
   );
   if (!r.ok) {
-    const e = await r.json();
-    throw new Error(
-      typeof e.detail === "string" ? e.detail : JSON.stringify(e.detail),
-    );
+    const text = await r.text();
+    let message = `HTTP ${r.status}: ${text.slice(0, 200)}`;
+    try {
+      const e = JSON.parse(text);
+      if (e?.detail != null) {
+        message =
+          typeof e.detail === "string" ? e.detail : JSON.stringify(e.detail);
+      }
+    } catch {
+      // Non-JSON error body: keep the status-based message.
+    }
+    throw new Error(message);
   }
   return r.json();
 }
@@ -81,6 +97,79 @@ const nav = [
   ["Counterfactual", GitCompareArrows],
   ["Run report", Download],
 ] as const;
+const Event = ({ e }: { e: Obj }) => (
+  <details
+    id={"event-" + e.id}
+    data-seq={(e.sequence_number ?? e.seq) ?? undefined}
+    tabIndex={-1}
+    className={
+      "event " +
+      (e.fault ? "injected " : "") +
+      "service-" +
+      (e.service || "lifecycle")
+    }
+  >
+    <summary>
+      <span className="event-icon">
+        <PixelIcon
+          name={
+            e.fault
+              ? "trap"
+              : e.event_type === "BUDGET_EXCEEDED"
+                ? "limit"
+                : e.service === "model"
+                  ? "model"
+                  : ["search", "extract"].includes(e.service)
+                    ? "tool"
+                    : e.event_type === "AGENT_OUTPUT"
+                      ? "answer"
+                      : "start"
+          }
+          size={18}
+        />
+      </span>
+      <span>
+        <b>
+          {e.event_type === "CALL"
+            ? `${e.service === "model" ? "Model completion" : e.service === "search" ? "Search evidence" : "Extract evidence"}`
+            : e.event_type.replaceAll("_", " ")}
+        </b>
+        <small>
+          {e.fault
+            ? e.fault.intervention
+            : e.request_summary?.query ||
+              e.description ||
+              e.service ||
+              (e.event_type === "AGENT_SPAN"
+                ? `${e.name || "span"} · agent telemetry (OTLP)`
+                : e.event_type === "JUDGE_RESULT"
+                  ? `Rubric grader · ${e.judgement?.method || "unknown method"}`
+                  : "Harness lifecycle")}
+        </small>
+      </span>
+      <span className="event-meta">
+        {e.status_code && (
+          <em className={e.status_code >= 400 ? "orange" : "green"}>
+            HTTP {e.status_code}
+          </em>
+        )}
+        {e.duration_ms != null && <small>{num(e.duration_ms)} ms</small>}
+      </span>
+      <ChevronDown size={14} />
+    </summary>
+    <div className="event-detail">
+      <p>
+        {e.upstream_called === false
+          ? "Upstream not called"
+          : e.upstream_called
+            ? "Upstream called"
+            : ""}
+      </p>
+      <EventDetail e={e} />
+    </div>
+  </details>
+);
+
 function App() {
   const [page, setPage] = useState("Leaderboard"),
     [catalog, setCatalog] = useState<Obj | null>(null),
@@ -104,6 +193,14 @@ function App() {
     [model, setModel] = useState(""),
     [concurrency, setConcurrency] = useState(3),
     [costCap, setCostCap] = useState("");
+  const [replaying, setReplaying] = useState(false),
+    [replayCheck, setReplayCheck] = useState<Obj | null>(null),
+    [diffLabels, setDiffLabels] = useState<{
+      left: string;
+      right: string;
+    } | null>(null),
+    [dose, setDose] = useState(""),
+    [doseLevels, setDoseLevels] = useState("0.25, 0.5, 0.75, 1");
   const refresh = async () => {
     try {
       const list = await api("/experiments");
@@ -138,6 +235,7 @@ function App() {
     setTrace(null);
     setPair(null);
     let stopped = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
     const load = async () => {
       try {
         const data = await api("/experiments/" + selected);
@@ -154,13 +252,16 @@ function App() {
                 : item,
             ),
           );
+          if (["completed", "cancelled", "failed"].includes(data.status)) {
+            clearInterval(timer);
+          }
         }
       } catch (e) {
         if (!stopped) setError(String(e));
       }
     };
     load();
-    const timer = setInterval(load, 1200);
+    timer = setInterval(load, 1200);
     return () => {
       stopped = true;
       clearInterval(timer);
@@ -176,6 +277,24 @@ function App() {
   const success = terminal.filter((r) => r.evaluation?.outcome === "success");
   const toggle = (list: string[], id: string, set: (x: string[]) => void) =>
     set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
+  const doseList = [
+    ...new Set(
+      doseLevels
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map(Number),
+    ),
+  ];
+  const doseValid =
+    !dose ||
+    (doseList.length >= 1 &&
+      doseList.length <= 6 &&
+      doseList.every((v) => Number.isFinite(v) && v > 0 && v <= 1));
+  const doseCount = dose && doseValid ? doseList.length : 0;
+  // Dose levels add extra conditions next to the chosen scenarios.
+  const plannedRuns =
+    agents.length * tasks.length * (scenarios.length + doseCount) * reps;
   const start = async () => {
     setBusy(true);
     setError("");
@@ -191,7 +310,12 @@ function App() {
         concurrency,
         max_cost_usd: costCap ? Number(costCap) : null,
         evidence_mode: mode,
-        snapshot_id: mode === "frozen" ? snapshot : "demo-v1",
+        ...(mode === "live"
+          ? {}
+          : { snapshot_id: mode === "frozen" ? snapshot : "demo-v1" }),
+        ...(dose && doseValid
+          ? { dose: { scenario_id: dose, levels: doseList } }
+          : {}),
       });
       setSelected(x.id);
       setPage("Experiments");
@@ -213,81 +337,72 @@ function App() {
   const openPair = async (r: Obj) => {
     try {
       setPair(await api("/runs/" + r.id + "/comparison"));
+      setDiffLabels(null);
       setPage("Counterfactual");
     } catch (e) {
       setError(String(e));
     }
   };
+  const openDiff = async (rightId: string) => {
+    if (!trace?.id || !rightId) return;
+    try {
+      const data = await api(
+        `/compare?left=${encodeURIComponent(trace.id)}&right=${encodeURIComponent(rightId)}`,
+      );
+      setPair(data);
+      setDiffLabels({
+        left: runLabel(data.baseline),
+        right: runLabel(data.fault),
+      });
+      setPage("Counterfactual");
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+  const replayRun = async () => {
+    if (!trace?.id || replaying) return;
+    setReplaying(true);
+    setError("");
+    setReplayCheck(null);
+    try {
+      let replayExp: Obj = await api("/runs/" + trace.id + "/replay", {});
+      while (!["completed", "cancelled", "failed"].includes(replayExp.status)) {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        replayExp = await api("/experiments/" + replayExp.id);
+      }
+      const replayId: string | undefined = replayExp.run_ids?.[0];
+      if (replayExp.status !== "completed" || !replayId) {
+        throw new Error(`Replay ${replayExp.status}: no completed run`);
+      }
+      const replayed: Obj = await api("/runs/" + replayId);
+      const before = {
+        outcome: trace.evaluation?.outcome ?? trace.status,
+        behavior: trace.evaluation?.behavior ?? "unknown",
+      };
+      const after = {
+        outcome: replayed.evaluation?.outcome ?? replayed.status,
+        behavior: replayed.evaluation?.behavior ?? "unknown",
+      };
+      const same =
+        before.outcome === after.outcome && before.behavior === after.behavior;
+      setReplayCheck({
+        replayId,
+        reproduced: same,
+        text: same
+          ? "Reproduced: same outcome and behaviour"
+          : `Not reproduced: outcome ${before.outcome}→${after.outcome}, behaviour ${before.behavior}→${after.behavior}`,
+      });
+      await openDiff(replayId);
+      await refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setReplaying(false);
+    }
+  };
   const loading = !catalog;
   const name = (id: string) =>
     catalog?.agents.find((a: Obj) => a.id === id)?.display_name || id;
-  const Event = ({ e }: { e: Obj }) => (
-    <details
-      id={"event-" + e.id}
-      tabIndex={-1}
-      className={
-        "event " +
-        (e.fault ? "injected " : "") +
-        "service-" +
-        (e.service || "lifecycle")
-      }
-    >
-      <summary>
-        <span className="event-icon">
-          <PixelIcon
-            name={
-              e.fault
-                ? "trap"
-                : e.event_type === "BUDGET_EXCEEDED"
-                  ? "limit"
-                  : e.service === "model"
-                    ? "model"
-                    : ["search", "extract"].includes(e.service)
-                      ? "tool"
-                      : e.event_type === "AGENT_OUTPUT"
-                        ? "answer"
-                        : "start"
-            }
-            size={18}
-          />
-        </span>
-        <span>
-          <b>
-            {e.event_type === "CALL"
-              ? `${e.service === "model" ? "Model completion" : e.service === "search" ? "Search evidence" : "Extract evidence"}`
-              : e.event_type.replaceAll("_", " ")}
-          </b>
-          <small>
-            {e.fault
-              ? e.fault.intervention
-              : e.request_summary?.query ||
-                e.description ||
-                e.service ||
-                "Harness lifecycle"}
-          </small>
-        </span>
-        <span className="event-meta">
-          {e.status_code && (
-            <em className={e.status_code >= 400 ? "orange" : "green"}>
-              HTTP {e.status_code}
-            </em>
-          )}
-          {e.duration_ms != null && <small>{num(e.duration_ms)} ms</small>}
-        </span>
-        <ChevronDown size={14} />
-      </summary>
-      <div className="event-detail">
-        <p>
-          {e.upstream_called === false
-            ? "Upstream not called"
-            : e.upstream_called
-              ? "Upstream called"
-              : ""}
-        </p>
-        <pre>{JSON.stringify(e, null, 2)}</pre>
-      </div>
-    </details>
-  );
   const runTable = (list: Obj[]) => (
     <div className="table-scroll">
       <table>
@@ -915,6 +1030,43 @@ function App() {
                           onChange={(e) => setReps(Number(e.target.value))}
                         />
                       </label>
+                      <label className="field">
+                        Dose-response sweep
+                        <select
+                          aria-label="Dose-response fault"
+                          value={dose}
+                          onChange={(e) => setDose(e.target.value)}
+                        >
+                          <option value="">Off</option>
+                          {catalog.scenarios
+                            .filter(
+                              (s: Obj) =>
+                                s.id !== "baseline" && s.service !== "instruction",
+                            )
+                            .map((s: Obj) => (
+                              <option key={s.id} value={s.id}>
+                                {s.display_name}
+                              </option>
+                            ))}
+                        </select>
+                        {dose && (
+                          <>
+                            <input
+                              aria-label="Dose levels"
+                              value={doseLevels}
+                              onChange={(e) => setDoseLevels(e.target.value)}
+                              placeholder="0.25, 0.5, 0.75, 1"
+                            />
+                            <small
+                              className={doseValid ? "" : "orange"}
+                            >
+                              {doseValid
+                                ? `Fault fires with probability p per request at each level (${doseList.length} levels).`
+                                : "Levels must be numbers in (0, 1], up to 6."}
+                            </small>
+                          </>
+                        )}
+                      </label>
                       <div className="plan-lines">
                         <span>
                           Agents <b>{agents.length}</b>
@@ -925,6 +1077,11 @@ function App() {
                         <span>
                           Scenarios <b>{scenarios.length}</b>
                         </span>
+                        {doseCount > 0 && (
+                          <span>
+                            Dose levels <b>{doseCount}</b>
+                          </span>
+                        )}
                         <span>
                           Model{" "}
                           <b>
@@ -943,12 +1100,7 @@ function App() {
                         </span>
                       </div>
                       <div className="run-count">
-                        <strong>
-                          {agents.length *
-                            tasks.length *
-                            scenarios.length *
-                            reps}
-                        </strong>
+                        <strong>{plannedRuns}</strong>
                         <span>planned executions</span>
                       </div>
                       <p className="muted">
@@ -971,11 +1123,8 @@ function App() {
                           !scenarios.includes("baseline") ||
                           reps < 1 ||
                           reps > 10 ||
-                          agents.length *
-                            tasks.length *
-                            scenarios.length *
-                            reps >
-                            catalog.limits.max_experiment_runs ||
+                          !doseValid ||
+                          plannedRuns > catalog.limits.max_experiment_runs ||
                           (mode === "frozen" && !snapshot)
                         }
                         onClick={start}
@@ -1129,9 +1278,14 @@ function App() {
                               ),
                               v = rs.length
                                 ? rs.filter(
-                                    (r) => r.evaluation.outcome === "success",
+                                    (r) => r.evaluation?.outcome === "success",
                                   ).length / rs.length
-                                : null;
+                                : null,
+                              leaderRow = (exp.leaderboard || []).find(
+                                (x: Obj) => x?.agent_id === a,
+                              ),
+                              faultLabel: Obj | null =
+                                leaderRow?.fault_labels?.[s] ?? null;
                             return (
                               <button
                                 key={s}
@@ -1140,12 +1294,17 @@ function App() {
                                   (v === 1 ? "good" : v === 0 ? "bad" : "")
                                 }
                                 onClick={() => {
+                                  if (faultLabel?.example_run_id) {
+                                    openTrace({ id: faultLabel.example_run_id });
+                                    return;
+                                  }
                                   setScenarioFilter(s);
                                   setPage("Trace explorer");
                                 }}
                               >
                                 <strong>{pct(v)}</strong>
                                 <small>{rs.length} completed</small>
+                                <FaultCellLabel label={faultLabel} />
                               </button>
                             );
                           })}
@@ -1187,13 +1346,33 @@ function App() {
                           <span className="badge">
                             {trace.evaluation?.outcome || trace.status}
                           </span>
+                          <CompareWithSelect
+                            runs={runs}
+                            trace={trace}
+                            label={(r) =>
+                              `${name(r.agent_id)} · ${r.scenario_id} · repeat ${(r.repetition ?? 0) + 1} · ${r.evaluation?.outcome || r.status}`
+                            }
+                            onChoose={openDiff}
+                          />
+                          <button
+                            className="secondary"
+                            disabled={replaying}
+                            onClick={replayRun}
+                          >
+                            <Play size={14} />
+                            {replaying ? "Replaying…" : "Replay run"}
+                          </button>
                         </div>
-                        <TraceTiles events={trace.events} />
+                        {trace.postmortem && (
+                          <Postmortem pm={trace.postmortem} />
+                        )}
+                        <TraceTotalsStats events={trace.events || []} />
+                        <TraceTiles events={trace.events || []} />
                         <BehaviorBadge
                           behavior={trace.evaluation?.behavior || "unknown"}
                         />
                         <GradingPanel run={trace} />
-                        {trace.events.map((e: Obj) => (
+                        {(trace.events || []).map((e: Obj) => (
                           <Event key={e.id} e={e} />
                         ))}
                         {trace.output?.answer && (
@@ -1213,10 +1392,12 @@ function App() {
                   <>
                     <section className="panel">
                       <div className="panel-title">
-                        <h2>Baseline ↔ intervention</h2>
+                        <h2>
+                          {diffLabels ? "Run comparison" : "Baseline ↔ intervention"}
+                        </h2>
                         <select
                           aria-label="Select faulted run"
-                          value={pair?.fault.id || ""}
+                          value={pair?.fault?.id || ""}
                           onChange={(e) => {
                             const r = runs.find((x) => x.id === e.target.value);
                             if (r) openPair(r);
@@ -1235,15 +1416,33 @@ function App() {
                       </div>
                       {pair ? (
                         <>
+                          {replayCheck &&
+                            pair.fault?.id === replayCheck.replayId && (
+                              <p
+                                role="status"
+                                className={
+                                  "replay-verdict " +
+                                  (replayCheck.reproduced ? "good" : "warn")
+                                }
+                              >
+                                {replayCheck.text}
+                              </p>
+                            )}
                           <p>{pair.limitation}</p>
                           <div className="stats compact">
                             <Stat
-                              label="Baseline → fault outcome"
+                              label={
+                                diffLabels
+                                  ? "Outcome: left → right"
+                                  : "Baseline → fault outcome"
+                              }
                               value={`${pair.baseline.evaluation?.outcome || pair.baseline.status} → ${pair.fault.evaluation?.outcome || pair.fault.status}`}
                               sub={
-                                pair.recovered
-                                  ? "Recovered after intervention"
-                                  : "No recovery observed"
+                                diffLabels
+                                  ? "Measured difference between the two runs"
+                                  : pair.recovered
+                                    ? "Recovered after intervention"
+                                    : "No recovery observed"
                               }
                             />
                             <Stat
@@ -1272,9 +1471,11 @@ function App() {
                               <b>{pair.explanation}</b>
                               <p>
                                 First observed divergence:{" "}
-                                {pair.first_divergence
-                                  ? `aligned row ${pair.first_divergence}`
-                                  : "none"}
+                                {pair.first_divergence_step != null
+                                  ? `step ${pair.first_divergence_step}`
+                                  : pair.first_divergence
+                                    ? `aligned row ${pair.first_divergence}`
+                                    : "none"}
                                 . Evidence coverage:{" "}
                                 {pair.comparable_evidence
                                   ? "comparable frozen responses"
@@ -1285,15 +1486,21 @@ function App() {
                           </div>
                           <div className="comparison-head">
                             <span>
-                              BASELINE{" "}
-                              <small>{pair.baseline.id.slice(0, 8)}</small>
+                              {diffLabels ? diffLabels.left : "BASELINE"}{" "}
+                              {!diffLabels && (
+                                <small>
+                                  {String(pair.baseline?.id ?? "").slice(0, 8)}
+                                </small>
+                              )}
                             </span>
                             <span>
-                              FAULT INJECTED{" "}
-                              <small>{pair.fault.scenario_id}</small>
+                              {diffLabels ? diffLabels.right : "FAULT INJECTED"}{" "}
+                              {!diffLabels && (
+                                <small>{pair.fault?.scenario_id}</small>
+                              )}
                             </span>
                           </div>
-                          {pair.alignment.map((row: Obj, i: number) => (
+                          {(pair.alignment || []).map((row: Obj, i: number) => (
                             <div
                               className={"comparison-row " + row.kind}
                               key={i}
@@ -1318,19 +1525,31 @@ function App() {
                               </div>
                               <span className="diff-label">
                                 {row.kind === "equal" ? "matched" : row.kind}
+                                {row.baseline_step != null ||
+                                row.fault_step != null
+                                  ? ` · step ${row.baseline_step ?? "—"} / ${row.fault_step ?? "—"}`
+                                  : ""}
                               </span>
                             </div>
                           ))}
                           <div className="comparison-row outputs">
                             <div>
-                              <h3>Baseline answer</h3>
+                              <h3>
+                                {diffLabels
+                                  ? `Answer · ${diffLabels.left}`
+                                  : "Baseline answer"}
+                              </h3>
                               <p>
                                 {pair.baseline.output?.answer ||
                                   "No answer returned"}
                               </p>
                             </div>
                             <div>
-                              <h3>Faulted answer</h3>
+                              <h3>
+                                {diffLabels
+                                  ? `Answer · ${diffLabels.right}`
+                                  : "Faulted answer"}
+                              </h3>
                               <p>
                                 {pair.fault.output?.answer ||
                                   pair.fault.output?.error ||

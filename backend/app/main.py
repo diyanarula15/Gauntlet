@@ -6,6 +6,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Literal
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
@@ -13,10 +14,19 @@ from .config import ROOT, settings as default_settings
 from .database import Store, now
 from .engine.runner import AGENTS, execute
 from .engine.proxy import router, sanitize, digest
-from .engine.metrics import aggregate
+from .engine.metrics import aggregate, dose_response
+from .engine.stats import significance
+from .engine.postmortem import postmortem
 from .engine.counterfactual import compare
 from .services import bifrost, snapshots as evidence, tavily
 from .services.mcp_tools import create_mcp_gateway
+from .services.otlp import otlp_router
+
+
+class DoseInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    scenario_id: str
+    levels: list[float] = Field(default=[0.25, 0.5, 0.75, 1.0], min_length=1, max_length=6)
 
 
 class ExperimentInput(BaseModel):
@@ -33,6 +43,7 @@ class ExperimentInput(BaseModel):
     model: str | None = Field(default=None, min_length=1, max_length=128)
     max_cost_usd: float | None = Field(default=None, gt=0, le=100, allow_inf_nan=False)
     concurrency: int = Field(default=3, ge=1, le=4)
+    dose: DoseInput | None = None
 
 
 class CaptureInput(BaseModel):
@@ -67,7 +78,8 @@ def create_app(database=None, configuration=None):
         for kind in ('experiment', 'run'):
             for obj in store.list(kind):
                 if obj['status'] in ('pending', 'running'):
-                    obj.update(status='failed', ending='interrupted', error='Backend restarted; in-process job interrupted')
+                    status = 'cancelled' if obj['status'] == 'pending' else 'failed'
+                    obj.update(status=status, ending='interrupted', error='Backend restarted; in-process job interrupted')
                     store.put(kind, obj)
         async with mcp_manager.run():
             yield
@@ -76,7 +88,13 @@ def create_app(database=None, configuration=None):
 
     app = FastAPI(title='FAULTLINE', version='0.2.0', lifespan=lifespan)
     app.state.store = store; app.state.settings = settings; app.state.capabilities = capabilities
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, exc: RequestValidationError):
+        # Drop non-JSON-safe fields (e.g. NaN echoed in 'input', exception objects in 'ctx').
+        return JSONResponse({'detail': [{k: v for k, v in err.items() if k not in ('input', 'ctx', 'url')} for err in exc.errors()]}, status_code=422)
     app.include_router(router(store, settings, tasks, capabilities))
+    app.include_router(otlp_router(store, capabilities))
 
     @app.middleware('http')
     async def local_origin_guard(request: Request, call_next):
@@ -112,7 +130,13 @@ def create_app(database=None, configuration=None):
             async with gate:
                 if require('experiment', experiment['id'])['status'] == 'cancelled': return
                 run = require('run', run_id)
-                await execute(store, settings, run, tasks[run['task_id']], capabilities)
+                try:
+                    await execute(store, settings, run, tasks[run['task_id']], capabilities)
+                except Exception as exc:
+                    run = require('run', run_id)
+                    run.update(status='failed', ending='crash', error='Harness error: ' + type(exc).__name__)
+                    store.event(run_id, 'RUN_FINISHED', status='failed', ending='crash')
+                    store.put('run', run)
                 current = require('experiment', experiment['id'])
                 if current['status'] != 'cancelled':
                     current['completed_runs'] += 1; store.put('experiment', current)
@@ -136,7 +160,17 @@ def create_app(database=None, configuration=None):
         for values, known in ((config.agent_ids, AGENTS), (config.task_ids, tasks), (config.scenario_ids, scenario_ids)):
             if len(set(values)) != len(values) or not set(values) <= set(known): raise HTTPException(422, 'Unknown or duplicate catalog IDs')
         if 'baseline' not in config.scenario_ids: raise HTTPException(422, 'Include baseline for controlled comparisons')
-        count = len(config.agent_ids) * len(config.task_ids) * len(config.scenario_ids) * config.repetitions
+        plans = {s['id']: s for s in scenarios if s['id'] in config.scenario_ids}
+        if config.dose:
+            base = next((s for s in scenarios if s['id'] == config.dose.scenario_id), None)
+            if not base or base['id'] == 'baseline' or base.get('service') == 'instruction': raise HTTPException(422, 'Dose-response needs a model or tool fault')
+            levels = sorted(set(config.dose.levels))
+            if any(not 0 < p <= 1 for p in levels): raise HTTPException(422, 'Dose levels must be in (0, 1]')
+            for p in levels:
+                ident = f"{base['id']}@{p:g}"
+                plans[ident] = {**base, 'id': ident, 'scenario_id': ident, 'display_name': f"{base['display_name']} @ p={p:g}", 'trigger': {'kind': 'probability', 'p': p}, 'dose': {'base': base['id'], 'p': p}}
+        if 'M4' in plans and config.evidence_mode != 'demo' and not settings.outage_primary_model: raise HTTPException(422, 'Set OUTAGE_PRIMARY_MODEL (and optionally FALLBACK_MODEL) to run M4 against a live gateway')
+        count = len(config.agent_ids) * len(config.task_ids) * len(plans) * config.repetitions
         if count > settings.max_experiment_runs: raise HTTPException(422, f'Maximum {settings.max_experiment_runs} runs per experiment')
         if config.evidence_mode == 'demo': config.snapshot_id = demo_snapshot['snapshot_id']
         elif config.evidence_mode == 'frozen':
@@ -154,23 +188,24 @@ def create_app(database=None, configuration=None):
             for agent in config.agent_ids:
                 for task_id in config.task_ids:
                     for repeat in range(config.repetitions):
-                        for scenario in config.scenario_ids:
+                        for scenario, plan in plans.items():
+                            # Same seed for every agent at a given repeat, so probabilistic faults hit agents identically (paired design).
                             run = {'id': uuid.uuid4().hex, 'experiment_id': experiment['id'], 'agent_id': agent, 'task_id': task_id, 'scenario_id': scenario, 'repetition': repeat, 'status': 'pending', 'config': values,
-                                'fault_plan': next(s for s in scenarios if s['id'] == scenario), 'schema_version': 2}
+                                'fault_plan': plan, 'seed': config.seed + repeat, 'schema_version': 2, **({'dose': plan['dose']} if plan.get('dose') else {})}
                             store.put('run', run); experiment['run_ids'].append(run['id'])
             store.put('experiment', experiment); jobs[experiment['id']] = asyncio.create_task(job(experiment)); return experiment
 
     @app.get('/api/experiments/{ident}')
     def experiment(ident: str):
         exp = require('experiment', ident); runs = [require('run', run_id) for run_id in exp['run_ids']]
-        return {**exp, 'runs': runs, 'leaderboard': aggregate(runs)}
+        return {**exp, 'runs': runs, 'leaderboard': aggregate(runs), 'significance': significance(runs), 'dose_response': dose_response(runs)}
 
     @app.get('/api/experiments/{ident}/leaderboard')
     def leaderboard(ident: str, scenario: str | None = None, tier: int | None = None):
         runs = experiment(ident)['runs']
         if scenario: runs = [r for r in runs if r['scenario_id'] == scenario]
         if tier: runs = [r for r in runs if tasks.get(r['task_id'], {}).get('tier', 1) == tier]
-        return {'rows': aggregate(runs), 'run_ids': [r['id'] for r in runs], 'filters': {'scenario': scenario, 'tier': tier}, 'limitation': 'Composite requires complete S/R/F/E. Missing components remain unavailable.'}
+        return {'rows': aggregate(runs), 'significance': significance(runs), 'dose_response': dose_response(runs), 'run_ids': [r['id'] for r in runs], 'filters': {'scenario': scenario, 'tier': tier}, 'limitation': 'Composite requires complete S/R/F/E. Missing components remain unavailable.'}
 
     @app.post('/api/experiments/{ident}/cancel')
     async def cancel(ident: str):
@@ -183,7 +218,7 @@ def create_app(database=None, configuration=None):
     def detailed_run(ident):
         run = require('run', ident)
         events = bifrost.enriched_events(store.events(ident))
-        return {**run, 'events': events}
+        return {**run, 'events': events, 'postmortem': postmortem(run, events) if run.get('evaluation') else None}
 
     @app.get('/api/runs/{ident}')
     def run(ident: str): return detailed_run(ident)
@@ -213,6 +248,20 @@ def create_app(database=None, configuration=None):
         baseline = detailed_run(left); fault = detailed_run(right)
         if baseline['task_id'] != fault['task_id']: raise HTTPException(422, 'Choose two runs of the same task')
         return compare(baseline, fault, baseline['events'], fault['events'])
+
+    @app.post('/api/runs/{ident}/replay', status_code=202)
+    async def replay(ident: str):
+        original = require('run', ident)
+        if original['status'] in ('pending', 'running'): raise HTTPException(409, 'Run is still in progress')
+        async with creation_lock:
+            if any(e['status'] in ('pending', 'running') for e in store.list('experiment')): raise HTTPException(409, 'One experiment at a time; wait or cancel the active job')
+            values = {**original['config'], 'agent_ids': [original['agent_id']], 'task_ids': [original['task_id']], 'scenario_ids': [original['scenario_id']], 'repetitions': 1}
+            experiment = {'id': uuid.uuid4().hex, 'name': 'Replay of ' + original['agent_id'] + ' · ' + original['task_id'] + ' · ' + original['scenario_id'], 'config': values, 'status': 'pending', 'created_at': now(),
+                          'completed_runs': 0, 'total_runs': 1, 'run_ids': [], 'schema_version': 2, 'replay_of': ident}
+            run = {k: original[k] for k in ('agent_id', 'task_id', 'scenario_id', 'repetition', 'config', 'fault_plan', 'seed', 'dose') if k in original}
+            run.update(id=uuid.uuid4().hex, experiment_id=experiment['id'], status='pending', schema_version=2, replay_of=ident)
+            store.put('run', run); experiment['run_ids'].append(run['id'])
+            store.put('experiment', experiment); jobs[experiment['id']] = asyncio.create_task(job(experiment)); return experiment
 
     @app.get('/api/experiments/{ident}/export')
     def export(ident: str):

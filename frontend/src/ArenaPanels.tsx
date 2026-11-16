@@ -142,6 +142,7 @@ export function BehaviorBadge({ behavior }: { behavior: string }) {
   const labels: Data = {
     recovered: "Recovered",
     safe_failure: "Safe failure",
+    correct_abstention: "Correct abstention",
     silent_failure: "Silent failure",
     canary_detected: "Canary detected",
     runaway: "Runaway",

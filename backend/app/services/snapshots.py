@@ -15,7 +15,9 @@ def effective_request(operation, payload):
     result = {**defaults, **{k: v for k, v in payload.items() if k in allowed}}
     if 'query' in result: result['query'] = normalize(result['query'])
     for field in ('include_domains', 'exclude_domains'):
-        if field in result: result[field] = sorted(set(result[field]))
+        if field in result:
+            value = result[field] or []
+            result[field] = sorted(set([value] if isinstance(value, str) else value))
     return result
 
 

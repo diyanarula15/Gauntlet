@@ -17,7 +17,13 @@ class AdapterFailure(Exception):
 
 def parse_output(text, output_format='json_stdout'):
     if output_format == 'plain_text':
-        return {'answer': text.strip(), 'citations': re.findall(r'https?://\S+', text), 'status': 'completed'}
+        answer = text.strip()
+        if not answer: return {'answer': '', 'citations': [], 'status': 'failed', 'error': 'Agent produced no output'}
+        citations = []
+        for raw in re.findall(r'https?://\S+', text):
+            url = raw.rstrip('.,;:)]}\'"')
+            if url and url not in citations: citations.append(url)
+        return {'answer': answer, 'citations': citations, 'status': 'completed'}
     for line in reversed(text.splitlines()):
         try:
             obj = json.loads(line)
@@ -38,14 +44,15 @@ async def bounded_read(stream):
 
 
 async def stop_process(proc):
-    if proc.returncode is not None: return
+    # Always signal the whole process group, even if the leader already exited: grandchildren may still run.
     try: os.killpg(proc.pid, signal.SIGTERM)
-    except ProcessLookupError: return
-    try: await asyncio.wait_for(proc.wait(), 1)
-    except asyncio.TimeoutError:
-        try: os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError: pass
-        await proc.wait()
+    except (ProcessLookupError, PermissionError): pass
+    if proc.returncode is None:
+        try: await asyncio.wait_for(proc.wait(), 1)
+        except asyncio.TimeoutError: pass
+    try: os.killpg(proc.pid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError): pass
+    if proc.returncode is None: await proc.wait()
 
 
 async def launch(agent, task, environment, on_start, on_log=None):

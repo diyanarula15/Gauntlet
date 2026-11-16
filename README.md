@@ -35,16 +35,21 @@ Verified with Python3.12 and Node26. For frontend development run `cd frontend &
 | Area | Working implementation |
 |---|---|
 | Agent connection | Approved CLI, JSON-file/plain-text CLI, HTTP and Docker adapters; no arbitrary browser command execution |
-| Reference agents | Custom httpx research flow with retries; OpenAI SDK function-calling fail-fast flow; genuine LangGraph StateGraph loop |
+| Reference agents | Custom httpx research flow with retries (5xx and 429 with Retry-After backoff) that also exports OTLP spans; deliberately fragile variant of it with no retries or result checking; OpenAI SDK function-calling fail-fast flow; genuine LangGraph StateGraph loop; Claude-native agent speaking the Anthropic Messages API with tool use |
+| Model transports | OpenAI chat completions and native Anthropic Messages (`/v1/messages`, `x-api-key` auth) through the same recording proxy; `stream: true` is served as a buffered SSE replay of the complete upstream response (both wire formats) |
+| Agent telemetry | OTLP/HTTP JSON trace ingestion at `/otlp/{run}/v1/traces` (protobuf is rejected with 415); spans land in the run timeline beside proxy-observed calls |
 | Tool transports | Tavily-shaped REST and official FastMCP Streamable HTTP `web_search` / `web_extract`, both through the same recording proxy |
-| Suite |8 stable, cited research tasks across lookup and multi-source/numerical tiers; versioned deterministic exact/numeric/set/regex answer specs |
-| Controlled failures | All9 architecture faults M1–M3/T1–T4/I1–I2, plus6 historical scenarios; declarative triggers and seeded probability decisions |
+| Suite |12 tasks: 8 cited lookup/multi-source/numerical tasks with exact/numeric/set/regex specs; 2 unanswerable tasks where the right answer is to abstain; 2 tier-3 synthesis tasks graded by a weighted rubric judge |
+| Controlled failures | All 9 architecture faults M1–M3/T1–T4/I1–I2, plus M4 (primary provider outage absorbed by the gateway fallback chain) and 6 historical scenarios; declarative triggers; probabilistic decisions seeded per repeat and shared across agents, so every agent faces identical fault draws |
+| Dose-response | Sweep any model/tool fault at firing probabilities p ∈ (0,1]; per-agent success-vs-p curves with Wilson bands and a breaking point (smallest p where success drops below 50%) |
 | Execution |3 concurrent runs by default; per-run serialized request ordering; model/tool/time/observed-cost caps; cancellation/process-group cleanup/output bounds |
 | Evidence |Immutable capture snapshots keyed by endpoint and effective parameters; content-addressed curated demo fixtures; hash verification; strict misses |
 | Telemetry |Immutable proxy events; Bifrost request/session correlation and asynchronous log reconciliation including fallback children; usage/cost completeness |
-| Grading |Answer, actual retrieved-citation grounding, limits, and behavior grades saved separately |
+| Grading |Answer, actual retrieved-citation grounding, limits, behavior and (tier 3) rubric-judge grades saved separately; `correct_abstention` label for honest refusals on unanswerable tasks |
+| Statistics |Exact McNemar test on runs paired by task and repeat, Holm-corrected, with a Newcombe interval for the difference; a gap is "established" only when the adjusted p < 0.05 |
+| Diagnosis |Deterministic postmortem per run (headline, root cause, findings, step timeline) built only from recorded events; one-click replay with the same seed, fault plan and evidence, plus a reproduced / not-reproduced verdict |
 | Reliability |Per-cell pass^1/3/5, Wilson intervals, latency median/p95, variation, robustness, recovery vs acceptable fault tolerance, cost/success frontier and transparent score |
-| Interface |Benchmark setup, live SSE trace/progress, leaderboard filters/weights/drill-down, repeat grid, heatmap, inspector graders, paired diff, JSON and HTML export |
+| Interface |Benchmark setup, live SSE trace/progress, leaderboard with Score/S/R/F/E/steps/tool calls/tokens/cost/time, n and 95% Wilson interval beside clean success, "not established" when intervals overlap, filters/weights/drill-down, repeat grid, per-fault behaviour labels linking to example runs, structured inspector (messages, reply, requested tool calls, results, per-call tokens/cost/time, running cost, OTLP spans, judge criteria, streamed/Claude-native/failover badges), postmortem card, replay, paired diff and any-two-runs diff aligned by model step, significance panel, abstention column, breaking-point charts, dose-sweep setup, JSON and HTML export |
 | Persistence |SQLite WAL preserves experiments, runs, grades, append-only events and snapshots across restart |
 
 The contracts, verification commands and limitations are documented below. Internal architecture and review notes stay local.
@@ -96,7 +101,13 @@ A **step is one model attempt**. Tool calls and total observable calls are separ
 
 Citation grounding checks every cited URL against pages the proxy returned during that exact run, then checks cited content against registered facts. It does not prove arbitrary semantic entailment. Exact accepted variants and known-conflict checks prevent several earlier false verdicts; contradictions/paraphrases outside that narrow specification can still be misgraded.
 
-Model costs prefer reported Bifrost USD. Explicit prices allow labelled estimates from actual tokens; missing information remains unknown. Tool charges require actual credits and an explicit price. Interrupted/fallback-incomplete telemetry is disclosed. Observed cost caps are checked between calls using available costs; **a Bifrost virtual-key budget is the hard monetary backstop**, since an already submitted request can exceed a local soft cap.
+Model costs prefer reported Bifrost USD. Explicit prices allow labelled estimates from actual tokens; missing information remains unknown. Tool charges require actual credits and an explicit price. Interrupted/fallback-incomplete telemetry is disclosed. Observed cost caps are checked between calls using available costs; when a cap is set on a live run, the proxy fetches Bifrost's per-request cost from `/api/logs` before each call (needs BIFROST_ADMIN_API_KEY) so the cap can trip mid-run; **a Bifrost virtual-key budget is the hard monetary backstop**, since an already submitted request can exceed a local soft cap.
+
+**Rubric judge.** Tier-3 answers are scored against weighted criteria. Live runs use one temperature-0 call to `JUDGE_MODEL` (default: the run model) through Bifrost, judging only against pages retrieved in that run; demo runs, and any judge error, fall back to a disclosed keyword rubric. Judge calls are recorded as `JUDGE_RESULT` and are not charged to the agent.
+
+**Abstention.** Unanswerable tasks have evidence that looks relevant but lacks the fact. Abstention and over-answer rates use clean (baseline) runs only, since refusing because a tool is down is not calibration. The offline simulator copies evidence and never abstains, so demo agents over-answer; meaningful abstention numbers need a live model.
+
+**Gateway failover (M4).** Live runs need `OUTAGE_PRIMARY_MODEL` (a model routed to a failing provider) and optionally `FALLBACK_MODEL`; the proxy sends the request with Bifrost `fallbacks` and records who served it. In demo mode the failover is simulated and labelled so.
 
 Frozen replay does **not** silently go live on a miss, intentionally preserving the original fairness requirement where the newer document proposed an expanding cache. Exact supported queries/parameters are visible in snapshot records; different SDK-generated queries may miss. Legacy query-only snapshots remain readable for historical traces but must be recaptured for new frozen experiments. New demo snapshot IDs change with corpus content, preserving immutable history.
 
@@ -115,6 +126,6 @@ Browser tooling is installed separately under `/tmp/faultline-browser`. With Pla
 
 ## Deliberate limits / next work
 
-No authenticated live-provider validation, paid rubric judge/tier3 suite, unanswerable task expansion, Anthropic-native transport, streaming, OTLP ingestion, distributed jobs, hosted deployment or Bifrost-fallback outage demonstration. Gateway logs/admin contracts are version tolerant and tested with fixtures; exact deployment behavior still needs credentials. SQLite logical entities use typed JSON documents rather than a destructive seven-table migration; compression is not implemented. A larger Recharts bundle produces a non-blocking size warning. No guaranteed deterministic live-model replay or statistical significance claim is made.
+No authenticated live-provider validation: the LLM judge, Anthropic route through Bifrost and live M4 failover are tested only with mocks and offline fallbacks. Streaming is a buffered replay, so time-to-first-token is not measured. OTLP accepts JSON only. Distributed jobs and hosted deployment are out of scope by design: the trust model is a single loopback process. Gateway logs/admin contracts are version tolerant and tested with fixtures; exact deployment behavior still needs credentials. SQLite logical entities use typed JSON documents rather than a destructive seven-table migration; stored event names are uppercase (`RUN_STARTED`, `CALL`, …), and every event read through the API also carries the spec's `type` (`run_start`, `model_call`, `tool_call`, `fault`, `limit`, `log`, `run_end`), `seq` and `ts_start`; compression is not implemented. A larger Recharts bundle produces a non-blocking size warning. Replays reuse seed, fault plan and evidence but cannot make a live model deterministic; the reproduced verdict reports what happened.
 
 Demo media and internal planning/review Markdown stay local and are excluded from Git.
